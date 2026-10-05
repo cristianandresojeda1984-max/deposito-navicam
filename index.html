@@ -140,7 +140,7 @@
       <span class="dot" id="statusDot"></span>
       <span id="statusText">Modo Local Guardado</span>
     </div>
-    <span id="resumenCarga" style="font-size:0.75rem; color:var(--text-muted);"></span>
+    <span id="resumenCarga" style="font-size:0.75rem; color:var(--text-muted);">Stock: 0 | SobreStock: 0 | Precios: 0</span>
   </div>
 
   <div class="search-box">
@@ -180,7 +180,13 @@
   }
 
   function actualizarEstadoCarga() {
-    document.getElementById('resumenCarga').innerText = `Stock: ${stockDepo.length} | SobreStock: ${sobreStockData.length} | Precios: ${Object.keys(preciosMap).length}`;
+    const cantStock = stockDepo.length;
+    const cantSobre = sobreStockData.length;
+    const cantPrecios = Object.keys(preciosMap).length;
+    const elResumen = document.getElementById('resumenCarga');
+    if (elResumen) {
+      elResumen.innerText = `Stock: ${cantStock} | SobreStock: ${cantSobre} | Precios: ${cantPrecios}`;
+    }
   }
 
   function guardarCotizacion(val) {
@@ -320,12 +326,10 @@
       const row = rows[i];
       if (!row) continue;
 
-      // Buscar código en la columna detectada o escanear toda la fila si no hay índice exacto
       let codVal = '';
       if (colCodigo !== -1 && row[colCodigo] !== undefined) {
         codVal = String(row[colCodigo]).trim();
       } else {
-        // Fallback: busca el primer valor numérico largo o texto alfanumérico válido
         const posibleCod = row.find(cell => cell !== undefined && String(cell).trim().length >= 3 && !isNaN(cell));
         if (posibleCod) codVal = String(posibleCod).trim();
       }
