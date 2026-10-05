@@ -168,7 +168,7 @@
 </div>
 
 <script>
-  const APP_VERSION = '2026-10-05 v5';
+  const APP_VERSION = '2026-10-05 v6';
   const URL_API = 'https://script.google.com/macros/s/AKfycbwY3sVIFHj0Nbymj8P66lrOXABlW_Knh6xIFuY-mU539xOPD8VVk-NPNpR87scLpiTJBg/exec';
 
   if ('serviceWorker' in navigator) {
@@ -1091,7 +1091,12 @@
       const ubicacion = ubicacionDe(item);
       const stock = item.STOCK !== undefined ? item.STOCK : '-';
       const enSobre = globalSobreStock.filter(x => x.CODIGO === cod);
-      const sobreTxt = enSobre.length ? `<div class="lista-mini">📑 En sobre stock: ${enSobre.map(x => esc(x.CAJON) + ' (' + x.CANTIDAD + ')').join(', ')}</div>` : '';
+      const totalSobre = enSobre.reduce((a, x) => a + (x.CANTIDAD || 0), 0);
+      const sobreTxt = enSobre.length ? `
+          <div class="info-item" style="margin-top:8px; border:1px solid var(--accent);">
+            <span class="info-label">📑 Sobre Stock: ${totalSobre} unid.</span>
+            ${enSobre.map(x => `<div style="font-size:0.85rem;"><strong>${esc(x.CAJON)}</strong> · ${x.CANTIDAD} unid. · ${esc(x.UBICACION)}</div>`).join('')}
+          </div>` : '';
 
       return `
         <div class="card">
