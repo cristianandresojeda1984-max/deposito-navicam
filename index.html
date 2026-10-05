@@ -153,20 +153,18 @@
 </div>
 
 <script>
+  // Control de versiones y purga de Service Workers obsoletos
   if ('serviceWorker' in navigator) {
-    const swCode = `
-      self.addEventListener('install', e => {
-        self.skipWaiting();
-      });
-      self.addEventListener('activate', e => {
-        e.waitUntil(
-          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => self.clients.claim())
-        );
-      });
-      self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
-    `;
-    const blob = new Blob([swCode], { type: 'application/javascript' });
-    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+    navigator.getRegistrations().then(registrations => {
+      for(let registration of registrations) {
+        registration.unregister();
+      }
+    });
+    caches.keys().then(names => {
+      for (let name of names) {
+        caches.delete(name);
+      }
+    });
   }
 
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
@@ -225,8 +223,8 @@
   }
 
   function obtenerFechaHoraActual() {
-    const ahora = new Date();
-    return ahora.toLocaleDateString('es-AR') + ' ' + ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    const ah = new Date();
+    return ah.toLocaleDateString('es-AR') + ' ' + ah.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   }
 
   function cambiarUbicacion(codigo, nuevaUbi) {
@@ -283,10 +281,7 @@
     if (!texto.trim()) {
       delete misNotas[codigo];
     } else {
-      misNotas[codigo] = {
-        texto: texto,
-        fecha: obtenerFechaHoraActual() + ' hs'
-      };
+      misNotas[codigo] = { texto: texto, fecha: obtenerFechaHoraActual() + ' hs' };
     }
     localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
     
@@ -302,7 +297,7 @@
     render();
   }
 
-  function parseSheetRows(rows, nombreHoja) {
+  function parseSheetRows(rows, nombreHoja, esSobreStock) {
     if (!rows || rows.length === 0) return [];
 
     let headerRowIndex = -1;
@@ -326,6 +321,11 @@
     const colCant = rawHeaders.findIndex(h => h.includes('CANT') || h.includes('STOCK'));
     const colUbi = rawHeaders.findIndex(h => h.includes('UBICACION') || h.includes('POSICION') || h.includes('LUGAR'));
     const colDesc = rawHeaders.findIndex(h => h.includes('DESCRIPCION') || h.includes('DETALLE') || h.includes('NOMBRE'));
+
+    if (esSobreStock && colDesc !== -1 && colCant === -1) {
+      alert("⚠️ Estás cargando un archivo de Stock de Depósito en la opción de Sobre Stock.");
+      return [];
+    }
 
     let resultados = [];
 
@@ -366,17 +366,18 @@
       workbook.SheetNames.forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        const parsed = parseSheetRows(rows, sheetName);
+        const parsed = parseSheetRows(rows, sheetName, false);
         acumulado = acumulado.concat(parsed);
       });
 
-      stockDepo = acumulado;
-      localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
-      alert(`Stock de Depósito cargado correctamente (${workbook.SheetNames.length} hojas): ${stockDepo.length} artículos en total.`);
-
-      actualizarEstadoCarga();
-      toggleMenu();
-      render();
+      if (acumulado.length > 0) {
+        stockDepo = acumulado;
+        localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
+        alert(`Stock de Depósito cargado correctamente: ${stockDepo.length} artículos.`);
+        actualizarEstadoCarga();
+        toggleMenu();
+        render();
+      }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -394,17 +395,18 @@
       workbook.SheetNames.forEach(sheetName => {
         const sheet = workbook.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        const parsed = parseSheetRows(rows, sheetName);
+        const parsed = parseSheetRows(rows, sheetName, true);
         acumulado = acumulado.concat(parsed);
       });
 
-      sobreStockData = acumulado;
-      localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
-      alert(`Sobre Stock cargado correctamente (${workbook.SheetNames.length} hojas): ${sobreStockData.length} artículos en total.`);
-
-      actualizarEstadoCarga();
-      toggleMenu();
-      render();
+      if (acumulado.length > 0) {
+        sobreStockData = acumulado;
+        localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+        alert(`Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
+        actualizarEstadoCarga();
+        toggleMenu();
+        render();
+      }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -437,7 +439,7 @@
       });
 
       localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
-      alert(`Lista de Precios cargada correctamente (${workbook.SheetNames.length} hojas): ${Object.keys(preciosMap).length} artículos en total.`);
+      alert(`Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
 
       actualizarEstadoCarga();
       toggleMenu();
@@ -602,11 +604,11 @@
                 <span class="code">${cod}</span>
                 ${dtoTag}
               </div>
-              <span class="badge">${cajon} (Ubi: ${ubi})</span>
+              <span class="badge">${cajon}</span>
             </div>
             <div class="info-grid">
               <div class="info-item"><span class="info-label">Cantidad Actual</span><strong>${cant} unid.</strong></div>
-              <div class="info-item"><span class="info-label">Ubicación</span><strong>${ubi}</strong></div>
+              <div class="info-item"><span class="info-label">Ubicación Estantería</span><strong>${ubi}</strong></div>
             </div>
 
             <div class="edit-row">
