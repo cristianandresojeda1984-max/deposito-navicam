@@ -159,7 +159,7 @@
     navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
   }
 
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwK-Di8ok5Wrnw_sqWx3iVcnaPFjXgZnIsjf6lDrITLuFtb1vXizItfwo6l_8u3L2AV/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwvnrrbCIjOa0cji1nIxPd4wF9l50ixc1oz7FyPlh7PC9sdbP1DxTorF4t880zDBbK9Yw/exec";
   
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
   let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
@@ -356,11 +356,11 @@
       const res = await fetch(APPS_SCRIPT_URL);
       const data = await res.json();
       
-      if (data.deposito && data.deposito.length > 1) {
+      if (data.deposito && data.deposito.length > 0) {
         stockDepo = parseSheetRows(data.deposito);
         localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
       }
-      if (data.sobreStock && data.sobreStock.length > 1) {
+      if (data.sobreStock && data.sobreStock.length > 0) {
         sobreStockData = parseSheetRows(data.sobreStock);
         localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
       }
@@ -380,14 +380,38 @@
   }
 
   function parseSheetRows(rows) {
-    const headers = rows[0].map(h => String(h).trim().toUpperCase());
-    return rows.slice(1).map(row => {
+    if (!rows || rows.length === 0) return [];
+
+    let headerRowIndex = 0;
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      const rowStr = rows[i].map(c => String(c).toUpperCase()).join(' ');
+      if (rowStr.includes('CODIGO') || rowStr.includes('CANT') || rowStr.includes('UBICACION') || rowStr.includes('DESCRIPCION')) {
+        headerRowIndex = i;
+        break;
+      }
+    }
+
+    const rawHeaders = rows[headerRowIndex].map(h => 
+      String(h).trim().toUpperCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    );
+
+    const headers = rawHeaders.map(h => {
+      if (h === 'CODIGO' || h === 'COD' || h === 'ARTICULO' || h === 'PRODUCTO') return 'CODIGO';
+      if (h === 'DESCRIPCION' || h === 'DETALLE' || h === 'NOMBRE') return 'DESCRIPCION';
+      if (h === 'UBICACION' || h === 'POSICION' || h === 'UBICAC' || h === 'LUGAR') return 'UBICACION';
+      if (h === 'STOCK' || h === 'CANT' || h === 'CANTIDAD') return 'STOCK';
+      if (h === 'CAJON' || h === 'DEPOSITO') return 'CAJON';
+      return h;
+    });
+
+    return rows.slice(headerRowIndex + 1).map(row => {
       let obj = {};
       headers.forEach((h, i) => {
-        obj[h] = row[i] !== undefined ? row[i] : '';
+        obj[h] = row[i] !== undefined ? String(row[i]).trim() : '';
       });
       return obj;
-    });
+    }).filter(item => item.CODIGO && item.CODIGO !== '');
   }
 
   function filtrar() {
@@ -535,7 +559,7 @@
           </div>
         `;
       } else {
-        const cant = item.CANTIDAD !== undefined ? item.CANTIDAD : 0;
+        const cant = item.STOCK !== undefined ? item.STOCK : (item.CANTIDAD !== undefined ? item.CANTIDAD : 0);
         const cajon = item.CAJON || 'SOBRE STOCK';
         const ubi = item.UBICACION || '-';
 
