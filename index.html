@@ -134,6 +134,7 @@
   <div class="menu-item" onclick="exportarSobre()">📤 Sobre Stock + Registro</div>
   <div class="menu-item" onclick="exportarStock()">📤 Stock Depósito</div>
   <div class="menu-item" onclick="exportarHistorial()">📤 Historial y Anotaciones</div>
+  <a class="menu-item" id="linkPlanilla" href="#" target="_blank" rel="noopener" style="display:none; text-decoration:none;">📊 Abrir planilla en Drive</a>
 
   <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarStock(event)">
   <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarSobreStock(event)">
@@ -168,7 +169,7 @@
 </div>
 
 <script>
-  const APP_VERSION = '2026-10-05 v6';
+  const APP_VERSION = '2026-10-05 v7';
   const URL_API = 'https://script.google.com/macros/s/AKfycbwY3sVIFHj0Nbymj8P66lrOXABlW_Knh6xIFuY-mU539xOPD8VVk-NPNpR87scLpiTJBg/exec';
 
   if ('serviceWorker' in navigator) {
@@ -362,6 +363,7 @@
       }
       if (d.sobre && d.sobre.version !== versionSobre) aplicarSobre(d.sobre);
       if (d.ubicaciones) { globalUbic = d.ubicaciones; guardarLS('navicam_ubic', globalUbic); }
+      if (d.planillaUrl) { const lp = document.getElementById('linkPlanilla'); lp.href = d.planillaUrl; lp.style.display = 'flex'; }
       const metas = d.metas || {};
       await bajarSiCambio('stock', metas.stock);
       await bajarSiCambio('precios', metas.precios);
@@ -758,8 +760,8 @@
         globalUbic = {}; guardarLS('navicam_ubic', globalUbic);
         let msg = `✅ Stock cargado y compartido: ${acumulado.length} artículos.`;
         if (res.totalConflictos) {
-          msg += `\n\n⚠️ ${res.totalConflictos} ubicaciones que se habían cambiado en la app fueron reemplazadas por las del Excel:\n` +
-            (res.conflictosUbicacion || []).slice(0, 15).map(x => `• ${x.codigo}: app ${x.app} → Excel ${x.excel}`).join('\n') +
+          msg += `\n\n⚠️ ${res.totalConflictos} ubicaciones cambiadas desde la última importación (en la app o en la planilla) fueron reemplazadas por las del Excel:\n` +
+            (res.conflictosUbicacion || []).slice(0, 15).map(x => `• ${x.codigo}: ${x.app} → Excel ${x.excel}`).join('\n') +
             (res.totalConflictos > 15 ? `\n… y ${res.totalConflictos - 15} más (ver Historial).` : '');
         }
         alert(msg);
@@ -1009,7 +1011,7 @@
             (cambios.length > 30 ? `<br>… y ${cambios.length - 30} más` : '') + '</div>';
         }
         if ((res.conflictosUbicacion || []).length) {
-          extra += '<div class="lista-mini">Ubicaciones de la app reemplazadas por el Excel:<br>' +
+          extra += '<div class="lista-mini">Ubicaciones cambiadas (app o planilla) reemplazadas por el Excel:<br>' +
             res.conflictosUbicacion.slice(0, 30).map(x => `${esc(x.codigo)}: ${esc(x.app)} → ${esc(x.excel)}`).join('<br>') + '</div>';
         }
         return `
