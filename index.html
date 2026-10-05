@@ -119,9 +119,13 @@
   <div class="menu-item" onclick="cambiarVista('anotaciones')">📝 Anotaciones</div>
   <div class="menu-item" onclick="cambiarVista('historial')">🕒 Historial de Cambios</div>
 
-  <div class="menu-title">Cargar Lista de Precios Manual</div>
-  <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Importar Lista de Precio (Excel)</div>
+  <div class="menu-title">Cargar Archivos Excel</div>
+  <div class="menu-item" onclick="document.getElementById('fileStock').click()">📦 Cargar Stock Depósito (.xlsx)</div>
+  <div class="menu-item" onclick="document.getElementById('fileSobre').click()">📑 Cargar Sobre Stock (.xlsx)</div>
+  <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Cargar Lista de Precios (.xlsx)</div>
 
+  <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarExcelStock(event)">
+  <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarExcelSobre(event)">
   <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarExcelPrecio(event)">
 </div>
 
@@ -134,9 +138,9 @@
   <div class="status-bar">
     <div class="status-indicator">
       <span class="dot" id="statusDot"></span>
-      <span id="statusText">Iniciando...</span>
+      <span id="statusText">Modo Local Guardado</span>
     </div>
-    <button onclick="cargarDatosDrive()" style="background:none; border:none; color:var(--accent); cursor:pointer; font-weight:bold;">🔄 Sincronizar Drive</button>
+    <span id="resumenCarga" style="font-size:0.75rem; color:var(--text-muted);"></span>
   </div>
 
   <div class="search-box">
@@ -159,8 +163,6 @@
     navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
   }
 
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwvnrrbCIjOa0cji1nIxPd4wF9l50ixc1oz7FyPlh7PC9sdbP1DxTorF4t880zDBbK9Yw/exec";
-  
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
   let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
   let sobreStockData = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
@@ -171,20 +173,23 @@
   let cotizacion = parseFloat(localStorage.getItem('navicam_dolar') || '1250');
 
   document.getElementById('cotizacionDolar').value = cotizacion;
+  actualizarEstadoCarga();
 
   function toggleMenu() {
     document.getElementById('drawer').classList.toggle('open');
     document.getElementById('overlay').classList.toggle('active');
   }
 
+  function actualizarEstadoCarga() {
+    const cantStock = stockDepo.length;
+    const cantSobre = sobreStockData.length;
+    const cantPrecios = Object.keys(preciosMap).length;
+    document.getElementById('resumenCarga').innerText = `Stock: ${cantStock} | SobreStock: ${cantSobre} | Precios: ${cantPrecios}`;
+  }
+
   function guardarCotizacion(val) {
     cotizacion = parseFloat(val) || 1;
     localStorage.setItem('navicam_dolar', cotizacion);
-    enviarADrive({
-      tipo: 'DOLAR',
-      valor: cotizacion,
-      detalle: `Cotización del dólar actualizada a ARS ${cotizacion}`
-    });
     render();
   }
 
@@ -218,19 +223,6 @@
     return ahora.toLocaleDateString('es-AR') + ' ' + ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  async function enviarADrive(payload) {
-    try {
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } catch (e) {
-      console.error("Error sincronizando con Drive:", e);
-    }
-  }
-
   function cambiarUbicacion(codigo, nuevaUbi) {
     nuevaUbi = nuevaUbi.trim().toUpperCase();
     const item = stockDepo.find(x => x.CODIGO === codigo);
@@ -252,8 +244,6 @@
     };
     historialCambios.unshift(registro);
     localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
-
-    enviarADrive(registro);
 
     alert(`Ubicación actualizada: ${codigo} ➔ ${nuevaUbi}`);
     render();
@@ -279,8 +269,6 @@
     historialCambios.unshift(registro);
     localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
 
-    enviarADrive(registro);
-
     alert(`Cantidad sobre stock actualizada: ${codigo} ➔ ${nuevaCant} unid.`);
     render();
   }
@@ -293,12 +281,6 @@
         texto: texto,
         fecha: obtenerFechaHoraActual() + ' hs'
       };
-      enviarADrive({
-        tipo: 'NOTA',
-        codigo: codigo,
-        texto: texto,
-        detalle: `Nota añadida/modificada: "${texto}"`
-      });
     }
     localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
     
@@ -311,71 +293,6 @@
   function borrarNota(codigo) {
     delete misNotas[codigo];
     localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
-    render();
-  }
-
-  function procesarExcelPrecio(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-
-      const sheet = workbook.Sheets['LISTA BASE'] || workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      preciosMap = {};
-      
-      for (let i = 4; i < rows.length; i++) {
-        const r = rows[i];
-        if (r && r[0]) {
-          const cod = String(r[0]).trim().toUpperCase();
-          const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
-          const precio = parseFloat(r[2]) || 0;
-          const desc = r[5] ? String(r[5]).trim() : '';
-          preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
-        }
-      }
-      localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
-      alert(`Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
-
-      toggleMenu();
-      render();
-    };
-    reader.readAsArrayBuffer(file);
-  }
-
-  async function cargarDatosDrive() {
-    const statusText = document.getElementById('statusText');
-    const statusDot = document.getElementById('statusDot');
-    statusText.innerText = 'Consultando Drive...';
-    statusDot.style.background = '#f59e0b';
-
-    try {
-      const res = await fetch(APPS_SCRIPT_URL);
-      const data = await res.json();
-      
-      if (data.deposito && data.deposito.length > 0) {
-        stockDepo = parseSheetRows(data.deposito);
-        localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
-      }
-      if (data.sobreStock && data.sobreStock.length > 0) {
-        sobreStockData = parseSheetRows(data.sobreStock);
-        localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
-      }
-      if (data.dolar) {
-        cotizacion = parseFloat(data.dolar);
-        localStorage.setItem('navicam_dolar', cotizacion);
-        document.getElementById('cotizacionDolar').value = cotizacion;
-      }
-
-      statusText.innerText = 'Conectado a Drive';
-      statusDot.style.background = '#22c55e';
-    } catch (err) {
-      statusText.innerText = 'Modo Local (Offline)';
-      statusDot.style.background = '#ef4444';
-    }
     render();
   }
 
@@ -415,6 +332,83 @@
       });
       return obj;
     }).filter(item => item.CODIGO && item.CODIGO !== '');
+  }
+
+  function procesarExcelStock(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      stockDepo = parseSheetRows(rows);
+      localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
+      alert(`Stock de Depósito cargado correctamente: ${stockDepo.length} artículos.`);
+
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function procesarExcelSobre(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      sobreStockData = parseSheetRows(rows);
+      localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+      alert(`Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
+
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function procesarExcelPrecio(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+
+      const sheet = workbook.Sheets['LISTA BASE'] || workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      preciosMap = {};
+      
+      for (let i = 4; i < rows.length; i++) {
+        const r = rows[i];
+        if (r && r[0]) {
+          const cod = String(r[0]).trim().toUpperCase();
+          const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
+          const precio = parseFloat(r[2]) || 0;
+          const desc = r[5] ? String(r[5]).trim() : '';
+          preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
+        }
+      }
+      localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
+      alert(`Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
+
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   function filtrar() {
@@ -598,7 +592,7 @@
     }).join('');
   }
 
-  cargarDatosDrive();
+  render();
 </script>
 
 </body>
