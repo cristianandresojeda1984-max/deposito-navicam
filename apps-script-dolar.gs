@@ -257,6 +257,24 @@ function doGet(e) {
     return salida({ dolar: d.dolar, fecha: d.fecha, sobre: leerSobre(), ubicaciones: leerUbicaciones(),
                     metas: { stock: leerMeta('stock'), precios: leerMeta('precios') }, planillaUrl: planilla().getUrl() });
   }
+  if (accion === 'pagina') {
+    // Descarga en partes chicas: filas [desde, desde+cuantos) de Stock o Precios
+    const tipo = e.parameter.tipo === 'precios' ? 'precios' : 'stock';
+    const desde = Math.max(0, parseInt(e.parameter.desde) || 0);
+    const cuantos = Math.min(5000, Math.max(1, parseInt(e.parameter.cuantos) || 1000));
+    const h = hoja(tipo);
+    const total = Math.max(0, h.getLastRow() - 1);
+    let filas = [];
+    if (desde < total) {
+      const n = Math.min(cuantos, total - desde);
+      filas = h.getRange(2 + desde, 1, n, ENC[tipo].length).getValues()
+        .filter(r => r.some(c => c !== '' && c !== null))
+        .map(r => tipo === 'stock'
+          ? [cod(r[0]), String(r[1] || '').trim(), String(r[3] === '' ? '-' : r[3]), String(r[2] || '').trim() || '-']
+          : [cod(r[0]), Number(r[1]) || 0, String(r[3] || '').trim(), String(r[2] || '').trim() || '-']);
+    }
+    return salida({ meta: leerMeta(tipo), total: total, desde: desde, filas: filas });
+  }
   if (accion === 'datos') {
     const tipo = e.parameter.tipo === 'precios' ? 'precios' : 'stock';
     const datos = tipo === 'stock' ? datosStock() : datosPrecios();

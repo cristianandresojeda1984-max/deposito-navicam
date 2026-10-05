@@ -169,7 +169,7 @@
 </div>
 
 <script>
-  const APP_VERSION = '2026-10-05 v7';
+  const APP_VERSION = '2026-10-05 v8';
   const URL_API = 'https://script.google.com/macros/s/AKfycbwY3sVIFHj0Nbymj8P66lrOXABlW_Knh6xIFuY-mU539xOPD8VVk-NPNpR87scLpiTJBg/exec';
 
   if ('serviceWorker' in navigator) {
@@ -378,12 +378,60 @@
     renderSeguro();
   }
 
+  // Descarga en partes chicas (las respuestas grandes a veces no llegan). Devuelve {meta, datos} en el formato de siempre.
+  async function bajarPorPartes(tipo, nombre) {
+    const tam = tipo === 'stock' ? 1000 : 2500;
+    const pedir = async (desde) => {
+      let ultimoError = null;
+      for (let intento = 0; intento < 3; intento++) {
+        try {
+          const r = await apiGet({ accion: 'pagina', tipo: tipo, desde: desde, cuantos: tam }, 45000);
+          if (r && Array.isArray(r.filas)) return r;
+          if (r && r.dolar !== undefined && r.filas === undefined) {
+            // servidor anterior, sin descarga por partes: se usa la descarga completa
+            return { viejo: await apiGet({ accion: 'datos', tipo: tipo }, 120000) };
+          }
+          ultimoError = new Error('respuesta inválida');
+        } catch (e) { ultimoError = e; }
+        await esperar(1500 * (intento + 1));
+      }
+      throw ultimoError || new Error('No se pudo descargar ' + nombre);
+    };
+    const primera = await pedir(0);
+    if (primera.viejo) return primera.viejo;
+    const total = primera.total || 0;
+    const version = primera.meta ? primera.meta.version : null;
+    const partes = [primera];
+    const desdes = [];
+    for (let d = tam; d < total; d += tam) desdes.push(d);
+    let hechas = 1;
+    const totalPartes = desdes.length + 1;
+    estadoSync = { ok: null, mensaje: `Descargando ${nombre} ${hechas}/${totalPartes}…` }; pintarEstadoSync();
+    // de a 3 pedidos en paralelo
+    for (let i = 0; i < desdes.length; i += 3) {
+      const lote = await Promise.all(desdes.slice(i, i + 3).map(pedir));
+      lote.forEach(p => {
+        if (p.meta && version !== null && p.meta.version !== version) throw new Error('Los datos cambiaron durante la descarga');
+        partes.push(p);
+      });
+      hechas += lote.length;
+      estadoSync = { ok: null, mensaje: `Descargando ${nombre} ${hechas}/${totalPartes}…` }; pintarEstadoSync();
+    }
+    partes.sort((a, b) => a.desde - b.desde);
+    const filas = [].concat(...partes.map(p => p.filas));
+    if (tipo === 'stock') return { meta: primera.meta, datos: filas };
+    const precios = {};
+    filas.forEach(r => { precios[r[0]] = [r[1], r[2], r[3]]; });
+    return { meta: primera.meta, datos: precios };
+  }
+
   // Baja stock / precios solo si en Google hay una versión distinta a la de este dispositivo
   async function bajarSiCambio(tipo, meta) {
     if (!meta || meta.version === metasLocales[tipo]) return;
-    estadoSync = { ok: null, mensaje: 'Descargando ' + (tipo === 'stock' ? 'stock' : 'lista de precios') + '…' };
+    const nombre = tipo === 'stock' ? 'stock' : 'lista de precios';
+    estadoSync = { ok: null, mensaje: 'Descargando ' + nombre + '…' };
     pintarEstadoSync();
-    const d = await apiGet({ accion: 'datos', tipo: tipo }, 120000);
+    const d = await bajarPorPartes(tipo, nombre);
     if (!d || !d.datos) return;
     if (tipo === 'stock') {
       globalStock = d.datos.map(r => ({ CODIGO: r[0], DESCRIPCION: r[1], STOCK: r[2], UBICACION: r[3] }));
