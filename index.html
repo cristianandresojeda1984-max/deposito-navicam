@@ -5,12 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión Depósito Navicam</title>
   
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#0f172a">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Navicam">
-
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -124,9 +118,9 @@
   <div class="menu-item" onclick="document.getElementById('fileSobre').click()">📑 Cargar Sobre Stock (.xlsx)</div>
   <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Cargar Lista de Precios (.xlsx)</div>
 
-  <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarExcelStock(event)">
-  <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarExcelSobre(event)">
-  <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarExcelPrecio(event)">
+  <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarArchivo(event, 'stock')">
+  <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarArchivo(event, 'sobre')">
+  <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarArchivo(event, 'precio')">
 </div>
 
 <div class="container">
@@ -137,14 +131,14 @@
 
   <div class="status-bar">
     <div class="status-indicator">
-      <span class="dot" id="statusDot"></span>
-      <span id="statusText">Modo Local Guardado</span>
+      <span class="dot"></span>
+      <span>Sistema Activo</span>
     </div>
     <span id="resumenCarga" style="font-size:0.75rem; color:var(--text-muted);">Stock: 0 | SobreStock: 0 | Precios: 0</span>
   </div>
 
   <div class="search-box">
-    <input type="text" id="searchInput" placeholder="Buscar por código, descripción o posición..." oninput="filtrar()">
+    <input type="text" id="searchInput" placeholder="Buscar por código, descripción o posición..." oninput="render()">
   </div>
 
   <div id="contentList">
@@ -153,15 +147,12 @@
 </div>
 
 <script>
+  // Limpieza total de basura previa en caché de service workers
   if ('serviceWorker' in navigator) {
-    navigator.getRegistrations().then(registrations => {
-      for(let registration of registrations) { registration.unregister(); }
-    });
-    caches.keys().then(names => {
-      for (let name of names) { caches.delete(name); }
-    });
+    navigator.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); });
   }
 
+  // Estado global de la aplicación
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
   let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
   let sobreStockData = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
@@ -180,12 +171,9 @@
   }
 
   function actualizarEstadoCarga() {
-    const cantStock = stockDepo.length;
-    const cantSobre = sobreStockData.length;
-    const cantPrecios = Object.keys(preciosMap).length;
-    const elResumen = document.getElementById('resumenCarga');
-    if (elResumen) {
-      elResumen.innerText = `Stock: ${cantStock} | SobreStock: ${cantSobre} | Precios: ${cantPrecios}`;
+    const el = document.getElementById('resumenCarga');
+    if (el) {
+      el.innerText = `Stock: ${stockDepo.length} | SobreStock: ${sobreStockData.length} | Precios: ${Object.keys(preciosMap).length}`;
     }
   }
 
@@ -204,17 +192,12 @@
       historial: 'Historial de Cambios'
     };
     document.getElementById('tituloSeccion').innerText = titulos[vista];
-
     const searchInput = document.getElementById('searchInput');
     searchInput.value = '';
 
-    if (vista === 'anotaciones') {
-      searchInput.placeholder = "Buscar en anotaciones...";
-    } else if (vista === 'historial') {
-      searchInput.placeholder = "Buscar en historial de cambios...";
-    } else {
-      searchInput.placeholder = "Buscar por código, descripción o posición...";
-    }
+    if (vista === 'anotaciones') searchInput.placeholder = "Buscar en anotaciones...";
+    else if (vista === 'historial') searchInput.placeholder = "Buscar en historial de cambios...";
+    else searchInput.placeholder = "Buscar por código, descripción o posición...";
 
     toggleMenu();
     render();
@@ -231,20 +214,17 @@
     if (!item) return;
 
     const anterior = item.UBICACION || 'SIN ASIGNAR';
-    if (anterior.toUpperCase() === nuevaUbi) return;
+    if (anterior === nuevaUbi) return;
 
     item.UBICACION = nuevaUbi;
     localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
 
-    const registro = {
+    historialCambios.unshift({
       codigo: codigo,
       tipo: 'UBICACION',
-      anterior: anterior,
-      nueva: nuevaUbi,
       detalle: `Ubicación actual ${nuevaUbi}, ubicación anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
-    };
-    historialCambios.unshift(registro);
+    });
     localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
 
     alert(`Ubicación actualizada: ${codigo} ➔ ${nuevaUbi}`);
@@ -262,13 +242,12 @@
     item.CANTIDAD = nuevaCant;
     localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
 
-    const registro = {
+    historialCambios.unshift({
       codigo: codigo,
       tipo: 'SOBRE_STOCK',
       detalle: `Cajón ${cajon}: Cantidad actual ${nuevaCant}, cantidad anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
-    };
-    historialCambios.unshift(registro);
+    });
     localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
 
     alert(`Cantidad sobre stock actualizada: ${codigo} ➔ ${nuevaCant} unid.`);
@@ -282,11 +261,8 @@
       misNotas[codigo] = { texto: texto, fecha: obtenerFechaHoraActual() + ' hs' };
     }
     localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
-    
     const elFecha = document.getElementById(`fecha-${codigo}`);
-    if (elFecha && misNotas[codigo]) {
-      elFecha.innerText = misNotas[codigo].fecha;
-    }
+    if (elFecha && misNotas[codigo]) elFecha.innerText = misNotas[codigo].fecha;
   }
 
   function borrarNota(codigo) {
@@ -295,7 +271,8 @@
     render();
   }
 
-  function procesarExcelStock(event) {
+  // Lector universal unificado e infalible para los 3 tipos de archivos
+  function procesarArchivo(event, tipo) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -304,135 +281,81 @@
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        let acumulado = [];
-
-        workbook.SheetNames.forEach(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          
-          rows.forEach((r, idx) => {
-            if (!r || r.length === 0) return;
-            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
-            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
-            
-            const desc = r[1] !== undefined ? String(r[1]).trim() : '';
-            const stock = r[3] !== undefined ? String(r[3]).trim() : (r[2] !== undefined ? String(r[2]).trim() : '0');
-            const ubi = r[r.length - 1] !== undefined ? String(r[r.length - 1]).trim() : '-';
-
-            acumulado.push({
-              CODIGO: cod.toUpperCase(),
-              DESCRIPCION: desc,
-              STOCK: stock,
-              UBICACION: ubi,
-              CAJON: sheetName
+        
+        if (tipo === 'stock') {
+          let acumulado = [];
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            rows.forEach(r => {
+              if (!r || r.length === 0) return;
+              const cod = r[0] !== undefined ? String(r[0]).trim() : '';
+              if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
+              
+              acumulado.push({
+                CODIGO: cod.toUpperCase(),
+                DESCRIPCION: r[1] !== undefined ? String(r[1]).trim() : '',
+                STOCK: r[3] !== undefined ? String(r[3]).trim() : (r[2] !== undefined ? String(r[2]).trim() : '0'),
+                UBICACION: r[r.length - 1] !== undefined ? String(r[r.length - 1]).trim() : '-'
+              });
             });
           });
-        });
+          stockDepo = acumulado;
+          localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
+          alert(`✅ Stock de Depósito cargado correctamente: ${stockDepo.length} artículos.`);
 
-        stockDepo = acumulado;
-        localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
-        alert(`Stock de Depósito cargado: ${stockDepo.length} artículos.`);
-        actualizarEstadoCarga();
-        toggleMenu();
-        render();
-      } catch (err) {
-        alert("Error al leer el archivo de stock: " + err.message);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  }
-
-  function procesarExcelSobre(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        let acumulado = [];
-
-        workbook.SheetNames.forEach(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          
-          rows.forEach(r => {
-            if (!r || r.length === 0) return;
-            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
-            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
-            
-            const cant = r[1] !== undefined ? parseInt(r[1]) || 0 : 0;
-            const ubi = r[2] !== undefined ? String(r[2]).trim() : '-';
-
-            acumulado.push({
-              CODIGO: cod.toUpperCase(),
-              CANTIDAD: cant,
-              UBICACION: ubi,
-              CAJON: sheetName
+        } else if (tipo === 'sobre') {
+          let acumulado = [];
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            rows.forEach(r => {
+              if (!r || r.length === 0) return;
+              const cod = r[0] !== undefined ? String(r[0]).trim() : '';
+              if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
+              
+              acumulado.push({
+                CODIGO: cod.toUpperCase(),
+                CANTIDAD: r[1] !== undefined ? parseInt(r[1]) || 0 : 0,
+                UBICACION: r[2] !== undefined ? String(r[2]).trim() : '-',
+                CAJON: sheetName
+              });
             });
           });
-        });
+          sobreStockData = acumulado;
+          localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+          alert(`✅ Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
 
-        sobreStockData = acumulado;
-        localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
-        alert(`Sobre Stock cargado: ${sobreStockData.length} artículos.`);
-        actualizarEstadoCarga();
-        toggleMenu();
-        render();
-      } catch (err) {
-        alert("Error al leer sobre stock: " + err.message);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  }
+        } else if (tipo === 'precio') {
+          preciosMap = {};
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            rows.forEach(r => {
+              if (!r || !r[0]) return;
+              const cod = String(r[0]).trim().toUpperCase();
+              if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 2) return;
 
-  function procesarExcelPrecio(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        preciosMap = {};
-
-        workbook.SheetNames.forEach(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          
-          rows.forEach(r => {
-            if (!r || !r[0]) return;
-            const cod = String(r[0]).trim().toUpperCase();
-            if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 2) return;
-
-            const precioUsd = parseFloat(r[2]) || 0;
-            const descuento = r[4] !== undefined ? String(r[4]).trim() : '-';
-            const desc = r[5] !== undefined ? String(r[5]).trim() : '';
-
-            preciosMap[cod] = {
-              precioUsd: precioUsd,
-              desc: desc,
-              descuento: descuento
-            };
+              preciosMap[cod] = {
+                precioUsd: parseFloat(r[2]) || 0,
+                desc: r[5] !== undefined ? String(r[5]).trim() : '',
+                descuento: r[4] !== undefined ? String(r[4]).trim() : '-'
+              };
+            });
           });
-        });
+          localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
+          alert(`✅ Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
+        }
 
-        localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
-        alert(`Lista de Precios cargada: ${Object.keys(preciosMap).length} artículos.`);
         actualizarEstadoCarga();
         toggleMenu();
         render();
       } catch (err) {
-        alert("Error al leer la lista de precios: " + err.message);
+        alert("❌ Error al procesar el archivo Excel: " + err.message);
       }
     };
     reader.readAsArrayBuffer(file);
-  }
-
-  function filtrar() {
-    render();
+    event.target.value = ''; // Resetea el input para permitir reimportar el mismo archivo si hace falta
   }
 
   function render() {
@@ -443,18 +366,13 @@
       const filtradosH = historialCambios.filter(h => 
         h.codigo.toLowerCase().includes(q) || h.detalle.toLowerCase().includes(q) || h.tipo.toLowerCase().includes(q)
       );
-
       if (filtradosH.length === 0) {
         listContainer.innerHTML = '<div class="loader">No hay cambios registrados en el historial.</div>';
         return;
       }
-
       listContainer.innerHTML = filtradosH.map(h => `
         <div class="card">
-          <div class="card-header">
-            <span class="code">${h.codigo}</span>
-            <span class="badge">${h.tipo}</span>
-          </div>
+          <div class="card-header"><span class="code">${h.codigo}</span><span class="badge">${h.tipo}</span></div>
           <div class="description" style="color:#fbbf24; font-weight:bold;">${h.detalle}</div>
           <div class="time-stamp">Modificado el ${h.fecha}</div>
         </div>
@@ -464,31 +382,23 @@
 
     if (vistaActual === 'anotaciones') {
       const codigosConNotas = Object.keys(misNotas).filter(cod => misNotas[cod] && misNotas[cod].texto.trim() !== '');
-      
       const filtradosNotas = codigosConNotas.filter(cod => {
         const objNota = misNotas[cod];
-        const txtNota = objNota.texto.toLowerCase();
         const infoPrecio = preciosMap[cod] || {};
-        const desc = (infoPrecio.desc || '').toLowerCase();
-        return cod.toLowerCase().includes(q) || txtNota.includes(q) || desc.includes(q);
+        return cod.toLowerCase().includes(q) || objNota.texto.toLowerCase().includes(q) || (infoPrecio.desc || '').toLowerCase().includes(q);
       });
 
       if (filtradosNotas.length === 0) {
         listContainer.innerHTML = '<div class="loader">No hay anotaciones registradas.</div>';
         return;
       }
-
       listContainer.innerHTML = filtradosNotas.map(cod => {
         const objNota = misNotas[cod];
-        const infoPrecio = preciosMap[cod] || {};
-        const desc = infoPrecio.desc || '';
-
+        const desc = (preciosMap[cod] || {}).desc || '';
         return `
           <div class="card">
             <div class="card-header">
-              <div class="code-container">
-                <span class="code">${cod}</span>
-              </div>
+              <span class="code">${cod}</span>
               <button class="btn-delete-note" onclick="borrarNota('${cod}')">✓ Borrar</button>
             </div>
             ${desc ? `<div class="description">${desc}</div>` : ''}
@@ -525,11 +435,9 @@
     }
 
     const limitados = filtrados.slice(0, 30);
-    const mensajeAviso = filtrados.length > 30 
-      ? `<div style="text-align:center; font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">Mostrando 30 de ${filtrados.length} resultados. Refiná la búsqueda si necesitás.</div>` 
-      : '';
+    const aviso = filtrados.length > 30 ? `<div style="text-align:center; font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">Mostrando 30 de ${filtrados.length} resultados.</div>` : '';
 
-    listContainer.innerHTML = mensajeAviso + limitados.map(item => {
+    listContainer.innerHTML = aviso + limitados.map(item => {
       const cod = item.CODIGO || 'SIN CÓDIGO';
       const objNota = misNotas[cod] || { texto: '', fecha: '' };
       const infoPrecio = preciosMap[cod] || {};
@@ -537,10 +445,7 @@
 
       if (vistaActual === 'deposito') {
         const precioUsd = infoPrecio.precioUsd || 0;
-        const precioArs = precioUsd > 0 
-          ? (precioUsd * cotizacion).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) 
-          : 'Consultar';
-
+        const precioArs = precioUsd > 0 ? (precioUsd * cotizacion).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) : 'Consultar';
         const desc = item.DESCRIPCION || infoPrecio.desc || '-';
         const ubicacion = item.UBICACION || '-';
         const stock = item.STOCK !== undefined ? item.STOCK : '-';
@@ -548,10 +453,7 @@
         return `
           <div class="card">
             <div class="card-header">
-              <div class="code-container">
-                <span class="code">${cod}</span>
-                ${dtoTag}
-              </div>
+              <div class="code-container"><span class="code">${cod}</span>${dtoTag}</div>
               <span class="badge">Ubicación: ${ubicacion}</span>
             </div>
             <div class="description">${desc}</div>
@@ -559,13 +461,11 @@
               <div class="info-item"><span class="info-label">Stock Depósito</span><strong>${stock}</strong></div>
               <div class="info-item"><span class="info-label">Precio ARS (USD ${precioUsd})</span><strong>${precioArs}</strong></div>
             </div>
-            
             <div class="edit-row">
               <span class="info-label">Cambiar Posición:</span>
               <input type="text" id="input-ubi-${cod}" class="edit-input" value="${ubicacion}">
               <button class="btn-save" onclick="cambiarUbicacion('${cod}', document.getElementById('input-ubi-${cod}').value)">Guardar</button>
             </div>
-
             <div class="notes-section">
               <div class="notes-header">
                 <span class="info-label">Anotación Personal:</span>
@@ -583,23 +483,18 @@
         return `
           <div class="card">
             <div class="card-header">
-              <div class="code-container">
-                <span class="code">${cod}</span>
-                ${dtoTag}
-              </div>
+              <div class="code-container"><span class="code">${cod}</span>${dtoTag}</div>
               <span class="badge">${cajon}</span>
             </div>
             <div class="info-grid">
               <div class="info-item"><span class="info-label">Cantidad Actual</span><strong>${cant} unid.</strong></div>
               <div class="info-item"><span class="info-label">Ubicación Estantería</span><strong>${ubi}</strong></div>
             </div>
-
             <div class="edit-row">
               <span class="info-label">Nueva Cantidad:</span>
               <input type="number" id="input-cant-${cod}-${cajon}" class="edit-input" style="width: 80px;" value="${cant}">
-              <button class="btn-save" onclick="cambiarCantSobreStock('${cod}', '${cajon}', document.getElementById('input-cant-${cod}-${cajon}').value)">Guardar Cantidad</button>
+              <button class="btn-save" onclick="cambiarCantSobreStock('${cod}', '${cajon}', document.getElementById('input-cant-${cod}-${cajon}').value)">Guardar</button>
             </div>
-
             <div class="notes-section">
               <div class="notes-header">
                 <span class="info-label">Anotación / Movimiento:</span>
