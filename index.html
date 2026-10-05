@@ -147,12 +147,10 @@
 </div>
 
 <script>
-  // Limpieza total de basura previa en caché de service workers
   if ('serviceWorker' in navigator) {
     navigator.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); });
   }
 
-  // Estado global de la aplicación
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
   let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
   let sobreStockData = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
@@ -271,7 +269,6 @@
     render();
   }
 
-  // Lector universal unificado e infalible para los 3 tipos de archivos
   function procesarArchivo(event, tipo) {
     const file = event.target.files[0];
     if (!file) return;
@@ -327,7 +324,7 @@
           alert(`✅ Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
 
         } else if (tipo === 'precio') {
-          preciosMap = {};
+          let nuevoPrecios = {};
           workbook.SheetNames.forEach(sheetName => {
             const sheet = workbook.Sheets[sheetName];
             const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
@@ -336,13 +333,14 @@
               const cod = String(r[0]).trim().toUpperCase();
               if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 2) return;
 
-              preciosMap[cod] = {
+              nuevoPrecios[cod] = {
                 precioUsd: parseFloat(r[2]) || 0,
                 desc: r[5] !== undefined ? String(r[5]).trim() : '',
                 descuento: r[4] !== undefined ? String(r[4]).trim() : '-'
               };
             });
           });
+          preciosMap = nuevoPrecios;
           localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
           alert(`✅ Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
         }
@@ -355,7 +353,7 @@
       }
     };
     reader.readAsArrayBuffer(file);
-    event.target.value = ''; // Resetea el input para permitir reimportar el mismo archivo si hace falta
+    event.target.value = '';
   }
 
   function render() {
