@@ -155,8 +155,14 @@
 <script>
   if ('serviceWorker' in navigator) {
     const swCode = `
-      self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
-      self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+      self.addEventListener('install', e => {
+        self.skipWaiting();
+      });
+      self.addEventListener('activate', e => {
+        e.waitUntil(
+          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => self.clients.claim())
+        );
+      });
       self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
     `;
     const blob = new Blob([swCode], { type: 'application/javascript' });
@@ -585,7 +591,7 @@
           </div>
         `;
       } else {
-        const cant = item.CANTIDAD !== undefined ? item.CANTIDAD : (item.STOCK !== undefined ? item.STOCK : 0);
+        const cant = item.CANTIDAD !== undefined ? item.CANTIDAD : 0;
         const cajon = item.CAJON || 'SOBRE STOCK';
         const ubi = item.UBICACION || '-';
 
@@ -596,10 +602,11 @@
                 <span class="code">${cod}</span>
                 ${dtoTag}
               </div>
-              <span class="badge">${cajon} (${ubi})</span>
+              <span class="badge">${cajon} (Ubi: ${ubi})</span>
             </div>
             <div class="info-grid">
               <div class="info-item"><span class="info-label">Cantidad Actual</span><strong>${cant} unid.</strong></div>
+              <div class="info-item"><span class="info-label">Ubicación</span><strong>${ubi}</strong></div>
             </div>
 
             <div class="edit-row">
