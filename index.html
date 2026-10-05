@@ -5,14 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión Depósito Navicam</title>
   
-  <!-- Enlace al Manifest PWA -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0f172a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Navicam">
 
-  <!-- SheetJS para procesar Excel (.xlsx) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -32,7 +30,6 @@
     .menu-btn { font-size: 1.8rem; background: none; border: none; color: #fbbf24; cursor: pointer; padding: 4px 8px; }
     h1 { font-size: 1.2rem; color: #fbbf24; text-align: center; flex: 1; }
 
-    /* Drawer / Menú Hamburguesa */
     .drawer {
       position: fixed; top: 0; left: -290px; width: 290px; height: 100%;
       background: var(--card-bg); border-right: 1px solid var(--border);
@@ -58,7 +55,6 @@
     .dollar-box label { font-size: 0.8rem; color: #fbbf24; display: block; margin-bottom: 6px; font-weight: bold; }
     .dollar-box input { width: 100%; padding: 8px; background: var(--card-bg); border: 1px solid var(--border); color: #fff; border-radius: 4px; font-size: 1rem; }
 
-    /* Status Bar */
     .status-bar {
       display: flex; justify-content: space-between; align-items: center;
       background: var(--card-bg); padding: 10px 14px; border-radius: 8px;
@@ -67,7 +63,6 @@
     .status-indicator { display: flex; align-items: center; gap: 6px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; }
 
-    /* Search & Cards */
     .search-box { margin-bottom: 16px; }
     input[type="text"], input[type="number"] {
       width: 100%; padding: 10px; border-radius: 8px;
@@ -112,7 +107,6 @@
 
 <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
 
-<!-- Menú Hamburguesa -->
 <div class="drawer" id="drawer">
   <div class="dollar-box">
     <label>💵 Cotización Dólar (ARS)</label>
@@ -125,14 +119,10 @@
   <div class="menu-item" onclick="cambiarVista('anotaciones')">📝 Anotaciones</div>
   <div class="menu-item" onclick="cambiarVista('historial')">🕒 Historial de Cambios</div>
 
-  <div class="menu-title">Importación Manual Excel</div>
-  <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Importar Lista de Precio</div>
-  <div class="menu-item" onclick="document.getElementById('fileStock').click()">📥 Importar Stock</div>
-  <div class="menu-item" onclick="document.getElementById('fileSobreStock').click()">📥 Importar Sobre Stock</div>
+  <div class="menu-title">Cargar Lista de Precios Manual</div>
+  <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Importar Lista de Precio (Excel)</div>
 
-  <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarExcel(event, 'precio')">
-  <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarExcel(event, 'stock')">
-  <input type="file" id="fileSobreStock" accept=".xlsx, .xls" onchange="procesarExcel(event, 'sobreStock')">
+  <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarExcelPrecio(event)">
 </div>
 
 <div class="container">
@@ -159,7 +149,6 @@
 </div>
 
 <script>
-  // Registro mínimo de Service Worker para habilitar la instalación PWA
   if ('serviceWorker' in navigator) {
     const swCode = `
       self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
@@ -170,7 +159,7 @@
     navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
   }
 
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9jVAQU2ieOwN5_MzA8M7164eVKgigX2ZK479Rgu6mNaimFeYDFGWuFkRccGe5Phv2/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwvnrrbCIjOa0cji1nIxPd4wF9l50ixc1oz7FyPlh7PC9sdbP1DxTorF4t880zDBbK9Yw/exec";
   
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
   let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
@@ -224,6 +213,19 @@
     return ahora.toLocaleDateString('es-AR') + ' ' + ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   }
 
+  async function enviarADrive(payload) {
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.error("Error sincronizando con Drive:", e);
+    }
+  }
+
   function cambiarUbicacion(codigo, nuevaUbi) {
     nuevaUbi = nuevaUbi.trim().toUpperCase();
     const item = stockDepo.find(x => x.CODIGO === codigo);
@@ -237,12 +239,16 @@
 
     const registro = {
       codigo: codigo,
-      tipo: 'Ubicación Depósito',
+      tipo: 'UBICACION',
+      anterior: anterior,
+      nueva: nuevaUbi,
       detalle: `Ubicación actual ${nuevaUbi}, ubicación anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
     };
     historialCambios.unshift(registro);
     localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
+
+    enviarADrive(registro);
 
     alert(`Ubicación actualizada: ${codigo} ➔ ${nuevaUbi}`);
     render();
@@ -261,12 +267,14 @@
 
     const registro = {
       codigo: codigo,
-      tipo: `Sobre Stock (${cajon})`,
-      detalle: `Cantidad actual ${nuevaCant}, cantidad anterior ${anterior}`,
+      tipo: 'SOBRE_STOCK',
+      detalle: `Cajón ${cajon}: Cantidad actual ${nuevaCant}, cantidad anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
     };
     historialCambios.unshift(registro);
     localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
+
+    enviarADrive(registro);
 
     alert(`Cantidad sobre stock actualizada: ${codigo} ➔ ${nuevaCant} unid.`);
     render();
@@ -280,6 +288,12 @@
         texto: texto,
         fecha: obtenerFechaHoraActual() + ' hs'
       };
+      enviarADrive({
+        tipo: 'NOTA',
+        codigo: codigo,
+        texto: texto,
+        detalle: `Nota añadida/modificada: "${texto}"`
+      });
     }
     localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
     
@@ -295,7 +309,7 @@
     render();
   }
 
-  function procesarExcel(event, tipo) {
+  function procesarExcelPrecio(event) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -304,65 +318,22 @@
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
 
-      if (tipo === 'precio') {
-        const sheet = workbook.Sheets['LISTA BASE'] || workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        preciosMap = {};
-        
-        for (let i = 4; i < rows.length; i++) {
-          const r = rows[i];
-          if (r && r[0]) {
-            const cod = String(r[0]).trim().toUpperCase();
-            const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
-            const precio = parseFloat(r[2]) || 0;
-            const desc = r[5] ? String(r[5]).trim() : '';
-            preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
-          }
+      const sheet = workbook.Sheets['LISTA BASE'] || workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      preciosMap = {};
+      
+      for (let i = 4; i < rows.length; i++) {
+        const r = rows[i];
+        if (r && r[0]) {
+          const cod = String(r[0]).trim().toUpperCase();
+          const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
+          const precio = parseFloat(r[2]) || 0;
+          const desc = r[5] ? String(r[5]).trim() : '';
+          preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
         }
-        localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
-        alert(`Lista de Precios cargada: ${Object.keys(preciosMap).length} artículos.`);
-
-      } else if (tipo === 'stock') {
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        stockDepo = [];
-
-        for (let i = 4; i < rows.length; i++) {
-          const r = rows[i];
-          if (r && r[0] && String(r[0]).toUpperCase() !== 'CODIGO') {
-            stockDepo.push({
-              CODIGO: String(r[0]).trim().toUpperCase(),
-              DESCRIPCION: r[1] ? String(r[1]).trim() : '',
-              UBICACION: r[3] ? String(r[3]).trim() : '-',
-              STOCK: r[4] !== undefined ? r[4] : 0,
-              COSTO: r[5] !== undefined ? r[5] : 0
-            });
-          }
-        }
-        localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
-        alert(`Stock de Depósito cargado: ${stockDepo.length} repuestos.`);
-
-      } else if (tipo === 'sobreStock') {
-        sobreStockData = [];
-        workbook.SheetNames.forEach(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          
-          for (let i = 1; i < rows.length; i++) {
-            const r = rows[i];
-            if (r && r[1] && String(r[0]).toUpperCase() !== 'CANT.') {
-              sobreStockData.push({
-                CANTIDAD: r[0] || 0,
-                CODIGO: String(r[1]).trim().toUpperCase(),
-                UBICACION: r[2] ? String(r[2]).trim() : '-',
-                CAJON: sheetName.trim().toUpperCase()
-              });
-            }
-          }
-        });
-        localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
-        alert(`Sobre Stock cargado: ${sobreStockData.length} ítems en cajones.`);
       }
+      localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
+      alert(`Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
 
       toggleMenu();
       render();
@@ -384,6 +355,11 @@
         stockDepo = parseSheetRows(data.deposito);
         localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
       }
+      if (data.sobreStock && data.sobreStock.length > 1) {
+        sobreStockData = parseSheetRows(data.sobreStock);
+        localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+      }
+
       statusText.innerText = 'Conectado a Drive';
       statusDot.style.background = '#22c55e';
     } catch (err) {
