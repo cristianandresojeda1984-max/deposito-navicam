@@ -295,87 +295,49 @@
     render();
   }
 
-  function parseSheetRows(rows, nombreHoja) {
-    if (!rows || rows.length === 0) return [];
-
-    let headerRowIndex = -1;
-    for (let i = 0; i < Math.min(rows.length, 15); i++) {
-      if (!rows[i]) continue;
-      const rowStr = rows[i].map(c => String(c).toUpperCase()).join(' ');
-      if (rowStr.includes('CODIGO') || rowStr.includes('CANT') || rowStr.includes('UBICACION') || rowStr.includes('DESCRIPCION') || rowStr.includes('STOCK')) {
-        headerRowIndex = i;
-        break;
-      }
-    }
-
-    if (headerRowIndex === -1) headerRowIndex = 0;
-
-    const rawHeaders = rows[headerRowIndex].map(h => 
-      String(h || '').trim().toUpperCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    );
-
-    const colCodigo = rawHeaders.findIndex(h => h.includes('CODIGO') || h.includes('COD') || h.includes('ARTICULO') || h.includes('PRODUCTO'));
-    const colCant = rawHeaders.findIndex(h => h.includes('CANT') || h.includes('STOCK'));
-    const colUbi = rawHeaders.findIndex(h => h.includes('UBICACION') || h.includes('POSICION') || h.includes('LUGAR'));
-    const colDesc = rawHeaders.findIndex(h => h.includes('DESCRIPCION') || h.includes('DETALLE') || h.includes('NOMBRE'));
-
-    let resultados = [];
-
-    for (let i = headerRowIndex + 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row) continue;
-
-      let codVal = '';
-      if (colCodigo !== -1 && row[colCodigo] !== undefined) {
-        codVal = String(row[colCodigo]).trim();
-      } else {
-        const posibleCod = row.find(cell => cell !== undefined && String(cell).trim().length >= 3 && !isNaN(cell));
-        if (posibleCod) codVal = String(posibleCod).trim();
-      }
-
-      if (!codVal || codVal.toUpperCase() === 'CODIGO' || codVal.toUpperCase() === 'CANT.' || codVal.toUpperCase() === 'STOCK') continue;
-
-      const cantVal = colCant !== -1 && row[colCant] !== undefined ? String(row[colCant]).trim() : (row[0] !== undefined ? String(row[0]).trim() : '0');
-      const ubiVal = colUbi !== -1 && row[colUbi] !== undefined ? String(row[colUbi]).trim() : (row[row.length - 1] !== undefined ? String(row[row.length - 1]).trim() : '-');
-      const descVal = colDesc !== -1 && row[colDesc] !== undefined ? String(row[colDesc]).trim() : '';
-
-      resultados.push({
-        CODIGO: codVal,
-        CANTIDAD: parseInt(cantVal) || 0,
-        STOCK: cantVal,
-        UBICACION: ubiVal,
-        DESCRIPCION: descVal,
-        CAJON: nombreHoja || 'GENERAL'
-      });
-    }
-
-    return resultados;
-  }
-
   function procesarExcelStock(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      
-      let acumulado = [];
-      workbook.SheetNames.forEach(sheetName => {
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        const parsed = parseSheetRows(rows, sheetName);
-        acumulado = acumulado.concat(parsed);
-      });
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        let acumulado = [];
 
-      stockDepo = acumulado;
-      localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
-      alert(`Stock de Depósito cargado correctamente: ${stockDepo.length} artículos.`);
-      actualizarEstadoCarga();
-      toggleMenu();
-      render();
+        workbook.SheetNames.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          
+          rows.forEach((r, idx) => {
+            if (!r || r.length === 0) return;
+            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
+            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
+            
+            const desc = r[1] !== undefined ? String(r[1]).trim() : '';
+            const stock = r[3] !== undefined ? String(r[3]).trim() : (r[2] !== undefined ? String(r[2]).trim() : '0');
+            const ubi = r[r.length - 1] !== undefined ? String(r[r.length - 1]).trim() : '-';
+
+            acumulado.push({
+              CODIGO: cod.toUpperCase(),
+              DESCRIPCION: desc,
+              STOCK: stock,
+              UBICACION: ubi,
+              CAJON: sheetName
+            });
+          });
+        });
+
+        stockDepo = acumulado;
+        localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
+        alert(`Stock de Depósito cargado: ${stockDepo.length} artículos.`);
+        actualizarEstadoCarga();
+        toggleMenu();
+        render();
+      } catch (err) {
+        alert("Error al leer el archivo de stock: " + err.message);
+      }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -386,23 +348,41 @@
 
     const reader = new FileReader();
     reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      
-      let acumulado = [];
-      workbook.SheetNames.forEach(sheetName => {
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        const parsed = parseSheetRows(rows, sheetName);
-        acumulado = acumulado.concat(parsed);
-      });
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        let acumulado = [];
 
-      sobreStockData = acumulado;
-      localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
-      alert(`Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
-      actualizarEstadoCarga();
-      toggleMenu();
-      render();
+        workbook.SheetNames.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          
+          rows.forEach(r => {
+            if (!r || r.length === 0) return;
+            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
+            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
+            
+            const cant = r[1] !== undefined ? parseInt(r[1]) || 0 : 0;
+            const ubi = r[2] !== undefined ? String(r[2]).trim() : '-';
+
+            acumulado.push({
+              CODIGO: cod.toUpperCase(),
+              CANTIDAD: cant,
+              UBICACION: ubi,
+              CAJON: sheetName
+            });
+          });
+        });
+
+        sobreStockData = acumulado;
+        localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+        alert(`Sobre Stock cargado: ${sobreStockData.length} artículos.`);
+        actualizarEstadoCarga();
+        toggleMenu();
+        render();
+      } catch (err) {
+        alert("Error al leer sobre stock: " + err.message);
+      }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -413,32 +393,40 @@
 
     const reader = new FileReader();
     reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      preciosMap = {};
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        preciosMap = {};
 
-      workbook.SheetNames.forEach(sheetName => {
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        
-        for (let i = 0; i < rows.length; i++) {
-          const r = rows[i];
-          if (r && r[0]) {
+        workbook.SheetNames.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          
+          rows.forEach(r => {
+            if (!r || !r[0]) return;
             const cod = String(r[0]).trim().toUpperCase();
-            if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 3) continue;
-            const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
-            const precio = parseFloat(r[2]) || 0;
-            const desc = r[5] ? String(r[5]).trim() : '';
-            preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
-          }
-        }
-      });
+            if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 2) return;
 
-      localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
-      alert(`Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
-      actualizarEstadoCarga();
-      toggleMenu();
-      render();
+            const precioUsd = parseFloat(r[2]) || 0;
+            const descuento = r[4] !== undefined ? String(r[4]).trim() : '-';
+            const desc = r[5] !== undefined ? String(r[5]).trim() : '';
+
+            preciosMap[cod] = {
+              precioUsd: precioUsd,
+              desc: desc,
+              descuento: descuento
+            };
+          });
+        });
+
+        localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
+        alert(`Lista de Precios cargada: ${Object.keys(preciosMap).length} artículos.`);
+        actualizarEstadoCarga();
+        toggleMenu();
+        render();
+      } catch (err) {
+        alert("Error al leer la lista de precios: " + err.message);
+      }
     };
     reader.readAsArrayBuffer(file);
   }
