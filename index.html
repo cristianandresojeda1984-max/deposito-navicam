@@ -118,9 +118,9 @@
   <div class="menu-item" onclick="document.getElementById('fileSobre').click()">📑 Cargar Sobre Stock (.xlsx)</div>
   <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Cargar Lista de Precios (.xlsx)</div>
 
-  <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarArchivo(event, 'stock')">
-  <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarArchivo(event, 'sobre')">
-  <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarArchivo(event, 'precio')">
+  <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarStock(event)">
+  <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarSobreStock(event)">
+  <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarPrecios(event)">
 </div>
 
 <div class="container">
@@ -151,16 +151,17 @@
     navigator.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); });
   }
 
-  let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
-  let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
-  let sobreStockData = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
-  let misNotas = JSON.parse(localStorage.getItem('navicam_notas_v2') || '{}');
-  let historialCambios = JSON.parse(localStorage.getItem('navicam_historial') || '[]');
+  // Almacenamiento global
+  let globalPrecios = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
+  let globalStock = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
+  let globalSobreStock = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
+  let globalNotas = JSON.parse(localStorage.getItem('navicam_notas_v2') || '{}');
+  let globalHistorial = JSON.parse(localStorage.getItem('navicam_historial') || '[]');
   
   let vistaActual = 'deposito';
-  let cotizacion = parseFloat(localStorage.getItem('navicam_dolar') || '1250');
+  let cotizacionDolar = parseFloat(localStorage.getItem('navicam_dolar') || '1250');
 
-  document.getElementById('cotizacionDolar').value = cotizacion;
+  document.getElementById('cotizacionDolar').value = cotizacionDolar;
   actualizarEstadoCarga();
 
   function toggleMenu() {
@@ -171,13 +172,13 @@
   function actualizarEstadoCarga() {
     const el = document.getElementById('resumenCarga');
     if (el) {
-      el.innerText = `Stock: ${stockDepo.length} | SobreStock: ${sobreStockData.length} | Precios: ${Object.keys(preciosMap).length}`;
+      el.innerText = `Stock: ${globalStock.length} | SobreStock: ${globalSobreStock.length} | Precios: ${Object.keys(globalPrecios).length}`;
     }
   }
 
   function guardarCotizacion(val) {
-    cotizacion = parseFloat(val) || 1;
-    localStorage.setItem('navicam_dolar', cotizacion);
+    cotizacionDolar = parseFloat(val) || 1;
+    localStorage.setItem('navicam_dolar', cotizacionDolar);
     render();
   }
 
@@ -208,22 +209,22 @@
 
   function cambiarUbicacion(codigo, nuevaUbi) {
     nuevaUbi = nuevaUbi.trim().toUpperCase();
-    const item = stockDepo.find(x => x.CODIGO === codigo);
+    const item = globalStock.find(x => x.CODIGO === codigo);
     if (!item) return;
 
     const anterior = item.UBICACION || 'SIN ASIGNAR';
     if (anterior === nuevaUbi) return;
 
     item.UBICACION = nuevaUbi;
-    localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
+    localStorage.setItem('navicam_stock', JSON.stringify(globalStock));
 
-    historialCambios.unshift({
+    globalHistorial.unshift({
       codigo: codigo,
       tipo: 'UBICACION',
       detalle: `Ubicación actual ${nuevaUbi}, ubicación anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
     });
-    localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
+    localStorage.setItem('navicam_historial', JSON.stringify(globalHistorial));
 
     alert(`Ubicación actualizada: ${codigo} ➔ ${nuevaUbi}`);
     render();
@@ -231,22 +232,22 @@
 
   function cambiarCantSobreStock(codigo, cajon, nuevaCant) {
     nuevaCant = parseInt(nuevaCant) || 0;
-    const item = sobreStockData.find(x => x.CODIGO === codigo && x.CAJON === cajon);
+    const item = globalSobreStock.find(x => x.CODIGO === codigo && x.CAJON === cajon);
     if (!item) return;
 
     const anterior = item.CANTIDAD || 0;
     if (anterior === nuevaCant) return;
 
     item.CANTIDAD = nuevaCant;
-    localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+    localStorage.setItem('navicam_sobre', JSON.stringify(globalSobreStock));
 
-    historialCambios.unshift({
+    globalHistorial.unshift({
       codigo: codigo,
       tipo: 'SOBRE_STOCK',
       detalle: `Cajón ${cajon}: Cantidad actual ${nuevaCant}, cantidad anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
     });
-    localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
+    localStorage.setItem('navicam_historial', JSON.stringify(globalHistorial));
 
     alert(`Cantidad sobre stock actualizada: ${codigo} ➔ ${nuevaCant} unid.`);
     render();
@@ -254,102 +255,129 @@
 
   function guardarNota(codigo, texto) {
     if (!texto.trim()) {
-      delete misNotas[codigo];
+      delete globalNotas[codigo];
     } else {
-      misNotas[codigo] = { texto: texto, fecha: obtenerFechaHoraActual() + ' hs' };
+      globalNotas[codigo] = { texto: texto, fecha: obtenerFechaHoraActual() + ' hs' };
     }
-    localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
+    localStorage.setItem('navicam_notas_v2', JSON.stringify(globalNotas));
     const elFecha = document.getElementById(`fecha-${codigo}`);
-    if (elFecha && misNotas[codigo]) elFecha.innerText = misNotas[codigo].fecha;
+    if (elFecha && globalNotas[codigo]) elFecha.innerText = globalNotas[codigo].fecha;
   }
 
   function borrarNota(codigo) {
-    delete misNotas[codigo];
-    localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
+    delete globalNotas[codigo];
+    localStorage.setItem('navicam_notas_v2', JSON.stringify(globalNotas));
     render();
   }
 
-  function procesarArchivo(event, tipo) {
+  // Funciones de procesamiento independientes y blindadas contra errores de ámbito
+  function procesarStock(event) {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = function(e) {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        if (tipo === 'stock') {
-          let acumulado = [];
-          workbook.SheetNames.forEach(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-            rows.forEach(r => {
-              if (!r || r.length === 0) return;
-              const cod = r[0] !== undefined ? String(r[0]).trim() : '';
-              if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
-              
-              acumulado.push({
-                CODIGO: cod.toUpperCase(),
-                DESCRIPCION: r[1] !== undefined ? String(r[1]).trim() : '',
-                STOCK: r[3] !== undefined ? String(r[3]).trim() : (r[2] !== undefined ? String(r[2]).trim() : '0'),
-                UBICACION: r[r.length - 1] !== undefined ? String(r[r.length - 1]).trim() : '-'
-              });
+        const wb = XLSX.read(data, { type: 'array' });
+        let acumulado = [];
+        wb.SheetNames.forEach(sheetName => {
+          const sheet = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          rows.forEach(r => {
+            if (!r || r.length === 0) return;
+            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
+            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
+            acumulado.push({
+              CODIGO: cod.toUpperCase(),
+              DESCRIPCION: r[1] !== undefined ? String(r[1]).trim() : '',
+              STOCK: r[3] !== undefined ? String(r[3]).trim() : (r[2] !== undefined ? String(r[2]).trim() : '0'),
+              UBICACION: r[r.length - 1] !== undefined ? String(r[r.length - 1]).trim() : '-'
             });
           });
-          stockDepo = acumulado;
-          localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
-          alert(`✅ Stock de Depósito cargado correctamente: ${stockDepo.length} artículos.`);
-
-        } else if (tipo === 'sobre') {
-          let acumulado = [];
-          workbook.SheetNames.forEach(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-            rows.forEach(r => {
-              if (!r || r.length === 0) return;
-              const cod = r[0] !== undefined ? String(r[0]).trim() : '';
-              if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
-              
-              acumulado.push({
-                CODIGO: cod.toUpperCase(),
-                CANTIDAD: r[1] !== undefined ? parseInt(r[1]) || 0 : 0,
-                UBICACION: r[2] !== undefined ? String(r[2]).trim() : '-',
-                CAJON: sheetName
-              });
-            });
-          });
-          sobreStockData = acumulado;
-          localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
-          alert(`✅ Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
-
-        } else if (tipo === 'precio') {
-          let nuevoPrecios = {};
-          workbook.SheetNames.forEach(sheetName => {
-            const sheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-            rows.forEach(r => {
-              if (!r || !r[0]) return;
-              const cod = String(r[0]).trim().toUpperCase();
-              if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 2) return;
-
-              nuevoPrecios[cod] = {
-                precioUsd: parseFloat(r[2]) || 0,
-                desc: r[5] !== undefined ? String(r[5]).trim() : '',
-                descuento: r[4] !== undefined ? String(r[4]).trim() : '-'
-              };
-            });
-          });
-          preciosMap = nuevoPrecios;
-          localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
-          alert(`✅ Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
-        }
-
+        });
+        globalStock = acumulado;
+        localStorage.setItem('navicam_stock', JSON.stringify(globalStock));
         actualizarEstadoCarga();
         toggleMenu();
         render();
+        alert(`✅ Stock de Depósito cargado correctamente: ${globalStock.length} artículos.`);
       } catch (err) {
-        alert("❌ Error al procesar el archivo Excel: " + err.message);
+        alert("❌ Error al procesar Stock: " + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  }
+
+  function procesarSobreStock(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        let acumulado = [];
+        wb.SheetNames.forEach(sheetName => {
+          const sheet = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          rows.forEach(r => {
+            if (!r || r.length === 0) return;
+            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
+            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
+            acumulado.push({
+              CODIGO: cod.toUpperCase(),
+              CANTIDAD: r[1] !== undefined ? parseInt(r[1]) || 0 : 0,
+              UBICACION: r[2] !== undefined ? String(r[2]).trim() : '-',
+              CAJON: sheetName
+            });
+          });
+        });
+        globalSobreStock = acumulado;
+        localStorage.setItem('navicam_sobre', JSON.stringify(globalSobreStock));
+        actualizarEstadoCarga();
+        toggleMenu();
+        render();
+        alert(`✅ Sobre Stock cargado correctamente: ${globalSobreStock.length} artículos.`);
+      } catch (err) {
+        alert("❌ Error al procesar Sobre Stock: " + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  }
+
+  function procesarPrecios(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        let tempPrecios = {};
+        wb.SheetNames.forEach(sheetName => {
+          const sheet = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          rows.forEach(r => {
+            if (!r || !r[0]) return;
+            const cod = String(r[0]).trim().toUpperCase();
+            if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 2) return;
+            tempPrecios[cod] = {
+              precioUsd: parseFloat(r[2]) || 0,
+              desc: r[5] !== undefined ? String(r[5]).trim() : '',
+              descuento: r[4] !== undefined ? String(r[4]).trim() : '-'
+            };
+          });
+        });
+        globalPrecios = tempPrecios;
+        localStorage.setItem('navicam_precios', JSON.stringify(globalPrecios));
+        actualizarEstadoCarga();
+        toggleMenu();
+        render();
+        alert(`✅ Lista de Precios cargada correctamente: ${Object.keys(globalPrecios).length} artículos.`);
+      } catch (err) {
+        alert("❌ Error al procesar Precios: " + err.message);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -361,7 +389,7 @@
     const listContainer = document.getElementById('contentList');
 
     if (vistaActual === 'historial') {
-      const filtradosH = historialCambios.filter(h => 
+      const filtradosH = globalHistorial.filter(h => 
         h.codigo.toLowerCase().includes(q) || h.detalle.toLowerCase().includes(q) || h.tipo.toLowerCase().includes(q)
       );
       if (filtradosH.length === 0) {
@@ -379,10 +407,10 @@
     }
 
     if (vistaActual === 'anotaciones') {
-      const codigosConNotas = Object.keys(misNotas).filter(cod => misNotas[cod] && misNotas[cod].texto.trim() !== '');
+      const codigosConNotas = Object.keys(globalNotas).filter(cod => globalNotas[cod] && globalNotas[cod].texto.trim() !== '');
       const filtradosNotas = codigosConNotas.filter(cod => {
-        const objNota = misNotas[cod];
-        const infoPrecio = preciosMap[cod] || {};
+        const objNota = globalNotas[cod];
+        const infoPrecio = globalPrecios[cod] || {};
         return cod.toLowerCase().includes(q) || objNota.texto.toLowerCase().includes(q) || (infoPrecio.desc || '').toLowerCase().includes(q);
       });
 
@@ -391,8 +419,8 @@
         return;
       }
       listContainer.innerHTML = filtradosNotas.map(cod => {
-        const objNota = misNotas[cod];
-        const desc = (preciosMap[cod] || {}).desc || '';
+        const objNota = globalNotas[cod];
+        const desc = (globalPrecios[cod] || {}).desc || '';
         return `
           <div class="card">
             <div class="card-header">
@@ -418,7 +446,7 @@
       return;
     }
 
-    const items = (vistaActual === 'deposito') ? stockDepo : sobreStockData;
+    const items = (vistaActual === 'deposito') ? globalStock : globalSobreStock;
     const filtrados = items.filter(item => {
       const cod = String(item.CODIGO || '').toLowerCase();
       const desc = String(item.DESCRIPCION || '').toLowerCase();
@@ -437,13 +465,13 @@
 
     listContainer.innerHTML = aviso + limitados.map(item => {
       const cod = item.CODIGO || 'SIN CÓDIGO';
-      const objNota = misNotas[cod] || { texto: '', fecha: '' };
-      const infoPrecio = preciosMap[cod] || {};
+      const objNota = globalNotas[cod] || { texto: '', fecha: '' };
+      const infoPrecio = globalPrecios[cod] || {};
       const dtoTag = infoPrecio.descuento ? `<span class="disc-tag">D: ${infoPrecio.descuento}</span>` : '';
 
       if (vistaActual === 'deposito') {
         const precioUsd = infoPrecio.precioUsd || 0;
-        const precioArs = precioUsd > 0 ? (precioUsd * cotizacion).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) : 'Consultar';
+        const precioArs = precioUsd > 0 ? (precioUsd * cotizacionDolar).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) : 'Consultar';
         const desc = item.DESCRIPCION || infoPrecio.desc || '-';
         const ubicacion = item.UBICACION || '-';
         const stock = item.STOCK !== undefined ? item.STOCK : '-';
