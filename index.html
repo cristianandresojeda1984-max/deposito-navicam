@@ -159,7 +159,7 @@
     navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
   }
 
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwvnrrbCIjOa0cji1nIxPd4wF9l50ixc1oz7FyPlh7PC9sdbP1DxTorF4t880zDBbK9Yw/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwK-Di8ok5Wrnw_sqWx3iVcnaPFjXgZnIsjf6lDrITLuFtb1vXizItfwo6l_8u3L2AV/exec";
   
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
   let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
@@ -180,6 +180,11 @@
   function guardarCotizacion(val) {
     cotizacion = parseFloat(val) || 1;
     localStorage.setItem('navicam_dolar', cotizacion);
+    enviarADrive({
+      tipo: 'DOLAR',
+      valor: cotizacion,
+      detalle: `Cotización del dólar actualizada a ARS ${cotizacion}`
+    });
     render();
   }
 
@@ -358,6 +363,11 @@
       if (data.sobreStock && data.sobreStock.length > 1) {
         sobreStockData = parseSheetRows(data.sobreStock);
         localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+      }
+      if (data.dolar) {
+        cotizacion = parseFloat(data.dolar);
+        localStorage.setItem('navicam_dolar', cotizacion);
+        document.getElementById('cotizacionDolar').value = cotizacion;
       }
 
       statusText.innerText = 'Conectado a Drive';
