@@ -89,4 +89,544 @@
     .btn-save:hover { background: var(--accent-hover); }
 
     .notes-section { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
-    .notes-header { display: flex; justify-
+    .notes-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .time-stamp { font-size: 0.72rem; color: #38bdf8; }
+    .btn-delete-note { background: #ef4444; color: #fff; border: none; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: bold; }
+
+    textarea {
+      width: 100%; background: #0f172a; border: 1px solid var(--border);
+      color: #fff; border-radius: 6px; padding: 8px; font-size: 0.85rem;
+      resize: vertical; margin-top: 4px; min-height: 50px;
+    }
+
+    .loader { text-align: center; padding: 30px 10px; color: var(--text-muted); font-size: 0.95rem; }
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+<div class="drawer" id="drawer">
+  <div class="dollar-box">
+    <label>💵 Cotización Dólar (ARS)</label>
+    <input type="number" id="cotizacionDolar" value="1250" onchange="guardarCotizacion(this.value)">
+  </div>
+
+  <div class="menu-title">Navegación</div>
+  <div class="menu-item" onclick="cambiarVista('deposito')">📦 Depósito Principal</div>
+  <div class="menu-item" onclick="cambiarVista('sobreStock')">📑 Sobre Stock</div>
+  <div class="menu-item" onclick="cambiarVista('anotaciones')">📝 Anotaciones</div>
+  <div class="menu-item" onclick="cambiarVista('historial')">🕒 Historial de Cambios</div>
+
+  <div class="menu-title">Cargar Archivos Excel</div>
+  <div class="menu-item" onclick="document.getElementById('fileStock').click()">📦 Cargar Stock Depósito (.xlsx)</div>
+  <div class="menu-item" onclick="document.getElementById('fileSobre').click()">📑 Cargar Sobre Stock (.xlsx)</div>
+  <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Cargar Lista de Precios (.xlsx)</div>
+
+  <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarExcelStock(event)">
+  <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarExcelSobre(event)">
+  <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarExcelPrecio(event)">
+</div>
+
+<div class="container">
+  <header>
+    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+    <h1 id="tituloSeccion">Depósito Principal</h1>
+  </header>
+
+  <div class="status-bar">
+    <div class="status-indicator">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Modo Local Guardado</span>
+    </div>
+    <span id="resumenCarga" style="font-size:0.75rem; color:var(--text-muted);">Stock: 0 | SobreStock: 0 | Precios: 0</span>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Buscar por código, descripción o posición..." oninput="filtrar()">
+  </div>
+
+  <div id="contentList">
+    <div class="loader">Escribí un código, descripción o posición para buscar...</div>
+  </div>
+</div>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.getRegistrations().then(registrations => {
+      for(let registration of registrations) { registration.unregister(); }
+    });
+    caches.keys().then(names => {
+      for (let name of names) { caches.delete(name); }
+    });
+  }
+
+  let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
+  let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
+  let sobreStockData = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
+  let misNotas = JSON.parse(localStorage.getItem('navicam_notas_v2') || '{}');
+  let historialCambios = JSON.parse(localStorage.getItem('navicam_historial') || '[]');
+  
+  let vistaActual = 'deposito';
+  let cotizacion = parseFloat(localStorage.getItem('navicam_dolar') || '1250');
+
+  document.getElementById('cotizacionDolar').value = cotizacion;
+  actualizarEstadoCarga();
+
+  function toggleMenu() {
+    document.getElementById('drawer').classList.toggle('open');
+    document.getElementById('overlay').classList.toggle('active');
+  }
+
+  function actualizarEstadoCarga() {
+    const cantStock = stockDepo.length;
+    const cantSobre = sobreStockData.length;
+    const cantPrecios = Object.keys(preciosMap).length;
+    const elResumen = document.getElementById('resumenCarga');
+    if (elResumen) {
+      elResumen.innerText = `Stock: ${cantStock} | SobreStock: ${cantSobre} | Precios: ${cantPrecios}`;
+    }
+  }
+
+  function guardarCotizacion(val) {
+    cotizacion = parseFloat(val) || 1;
+    localStorage.setItem('navicam_dolar', cotizacion);
+    render();
+  }
+
+  function cambiarVista(vista) {
+    vistaActual = vista;
+    const titulos = {
+      deposito: 'Depósito Principal',
+      sobreStock: 'Sobre Stock',
+      anotaciones: 'Anotaciones',
+      historial: 'Historial de Cambios'
+    };
+    document.getElementById('tituloSeccion').innerText = titulos[vista];
+
+    const searchInput = document.getElementById('searchInput');
+    searchInput.value = '';
+
+    if (vista === 'anotaciones') {
+      searchInput.placeholder = "Buscar en anotaciones...";
+    } else if (vista === 'historial') {
+      searchInput.placeholder = "Buscar en historial de cambios...";
+    } else {
+      searchInput.placeholder = "Buscar por código, descripción o posición...";
+    }
+
+    toggleMenu();
+    render();
+  }
+
+  function obtenerFechaHoraActual() {
+    const ah = new Date();
+    return ah.toLocaleDateString('es-AR') + ' ' + ah.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function cambiarUbicacion(codigo, nuevaUbi) {
+    nuevaUbi = nuevaUbi.trim().toUpperCase();
+    const item = stockDepo.find(x => x.CODIGO === codigo);
+    if (!item) return;
+
+    const anterior = item.UBICACION || 'SIN ASIGNAR';
+    if (anterior.toUpperCase() === nuevaUbi) return;
+
+    item.UBICACION = nuevaUbi;
+    localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
+
+    const registro = {
+      codigo: codigo,
+      tipo: 'UBICACION',
+      anterior: anterior,
+      nueva: nuevaUbi,
+      detalle: `Ubicación actual ${nuevaUbi}, ubicación anterior ${anterior}`,
+      fecha: obtenerFechaHoraActual()
+    };
+    historialCambios.unshift(registro);
+    localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
+
+    alert(`Ubicación actualizada: ${codigo} ➔ ${nuevaUbi}`);
+    render();
+  }
+
+  function cambiarCantSobreStock(codigo, cajon, nuevaCant) {
+    nuevaCant = parseInt(nuevaCant) || 0;
+    const item = sobreStockData.find(x => x.CODIGO === codigo && x.CAJON === cajon);
+    if (!item) return;
+
+    const anterior = item.CANTIDAD || 0;
+    if (anterior === nuevaCant) return;
+
+    item.CANTIDAD = nuevaCant;
+    localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+
+    const registro = {
+      codigo: codigo,
+      tipo: 'SOBRE_STOCK',
+      detalle: `Cajón ${cajon}: Cantidad actual ${nuevaCant}, cantidad anterior ${anterior}`,
+      fecha: obtenerFechaHoraActual()
+    };
+    historialCambios.unshift(registro);
+    localStorage.setItem('navicam_historial', JSON.stringify(historialCambios));
+
+    alert(`Cantidad sobre stock actualizada: ${codigo} ➔ ${nuevaCant} unid.`);
+    render();
+  }
+
+  function guardarNota(codigo, texto) {
+    if (!texto.trim()) {
+      delete misNotas[codigo];
+    } else {
+      misNotas[codigo] = { texto: texto, fecha: obtenerFechaHoraActual() + ' hs' };
+    }
+    localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
+    
+    const elFecha = document.getElementById(`fecha-${codigo}`);
+    if (elFecha && misNotas[codigo]) {
+      elFecha.innerText = misNotas[codigo].fecha;
+    }
+  }
+
+  function borrarNota(codigo) {
+    delete misNotas[codigo];
+    localStorage.setItem('navicam_notas_v2', JSON.stringify(misNotas));
+    render();
+  }
+
+  function parseSheetRows(rows, nombreHoja) {
+    if (!rows || rows.length === 0) return [];
+
+    let headerRowIndex = -1;
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      if (!rows[i]) continue;
+      const rowStr = rows[i].map(c => String(c).toUpperCase()).join(' ');
+      if (rowStr.includes('CODIGO') || rowStr.includes('CANT') || rowStr.includes('UBICACION') || rowStr.includes('DESCRIPCION') || rowStr.includes('STOCK')) {
+        headerRowIndex = i;
+        break;
+      }
+    }
+
+    if (headerRowIndex === -1) headerRowIndex = 0;
+
+    const rawHeaders = rows[headerRowIndex].map(h => 
+      String(h || '').trim().toUpperCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    );
+
+    const colCodigo = rawHeaders.findIndex(h => h.includes('CODIGO') || h.includes('COD') || h.includes('ARTICULO') || h.includes('PRODUCTO'));
+    const colCant = rawHeaders.findIndex(h => h.includes('CANT') || h.includes('STOCK'));
+    const colUbi = rawHeaders.findIndex(h => h.includes('UBICACION') || h.includes('POSICION') || h.includes('LUGAR'));
+    const colDesc = rawHeaders.findIndex(h => h.includes('DESCRIPCION') || h.includes('DETALLE') || h.includes('NOMBRE'));
+
+    let resultados = [];
+
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+
+      let codVal = '';
+      if (colCodigo !== -1 && row[colCodigo] !== undefined) {
+        codVal = String(row[colCodigo]).trim();
+      } else {
+        const posibleCod = row.find(cell => cell !== undefined && String(cell).trim().length >= 3 && !isNaN(cell));
+        if (posibleCod) codVal = String(posibleCod).trim();
+      }
+
+      if (!codVal || codVal.toUpperCase() === 'CODIGO' || codVal.toUpperCase() === 'CANT.' || codVal.toUpperCase() === 'STOCK') continue;
+
+      const cantVal = colCant !== -1 && row[colCant] !== undefined ? String(row[colCant]).trim() : (row[0] !== undefined ? String(row[0]).trim() : '0');
+      const ubiVal = colUbi !== -1 && row[colUbi] !== undefined ? String(row[colUbi]).trim() : (row[row.length - 1] !== undefined ? String(row[row.length - 1]).trim() : '-');
+      const descVal = colDesc !== -1 && row[colDesc] !== undefined ? String(row[colDesc]).trim() : '';
+
+      resultados.push({
+        CODIGO: codVal,
+        CANTIDAD: parseInt(cantVal) || 0,
+        STOCK: cantVal,
+        UBICACION: ubiVal,
+        DESCRIPCION: descVal,
+        CAJON: nombreHoja || 'GENERAL'
+      });
+    }
+
+    return resultados;
+  }
+
+  function procesarExcelStock(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      let acumulado = [];
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const parsed = parseSheetRows(rows, sheetName);
+        acumulado = acumulado.concat(parsed);
+      });
+
+      stockDepo = acumulado;
+      localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
+      alert(`Stock de Depósito cargado correctamente: ${stockDepo.length} artículos.`);
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function procesarExcelSobre(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      let acumulado = [];
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const parsed = parseSheetRows(rows, sheetName);
+        acumulado = acumulado.concat(parsed);
+      });
+
+      sobreStockData = acumulado;
+      localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
+      alert(`Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function procesarExcelPrecio(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      preciosMap = {};
+
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i];
+          if (r && r[0]) {
+            const cod = String(r[0]).trim().toUpperCase();
+            if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 3) continue;
+            const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
+            const precio = parseFloat(r[2]) || 0;
+            const desc = r[5] ? String(r[5]).trim() : '';
+            preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
+          }
+        }
+      });
+
+      localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
+      alert(`Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function filtrar() {
+    render();
+  }
+
+  function render() {
+    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    const listContainer = document.getElementById('contentList');
+
+    if (vistaActual === 'historial') {
+      const filtradosH = historialCambios.filter(h => 
+        h.codigo.toLowerCase().includes(q) || h.detalle.toLowerCase().includes(q) || h.tipo.toLowerCase().includes(q)
+      );
+
+      if (filtradosH.length === 0) {
+        listContainer.innerHTML = '<div class="loader">No hay cambios registrados en el historial.</div>';
+        return;
+      }
+
+      listContainer.innerHTML = filtradosH.map(h => `
+        <div class="card">
+          <div class="card-header">
+            <span class="code">${h.codigo}</span>
+            <span class="badge">${h.tipo}</span>
+          </div>
+          <div class="description" style="color:#fbbf24; font-weight:bold;">${h.detalle}</div>
+          <div class="time-stamp">Modificado el ${h.fecha}</div>
+        </div>
+      `).join('');
+      return;
+    }
+
+    if (vistaActual === 'anotaciones') {
+      const codigosConNotas = Object.keys(misNotas).filter(cod => misNotas[cod] && misNotas[cod].texto.trim() !== '');
+      
+      const filtradosNotas = codigosConNotas.filter(cod => {
+        const objNota = misNotas[cod];
+        const txtNota = objNota.texto.toLowerCase();
+        const infoPrecio = preciosMap[cod] || {};
+        const desc = (infoPrecio.desc || '').toLowerCase();
+        return cod.toLowerCase().includes(q) || txtNota.includes(q) || desc.includes(q);
+      });
+
+      if (filtradosNotas.length === 0) {
+        listContainer.innerHTML = '<div class="loader">No hay anotaciones registradas.</div>';
+        return;
+      }
+
+      listContainer.innerHTML = filtradosNotas.map(cod => {
+        const objNota = misNotas[cod];
+        const infoPrecio = preciosMap[cod] || {};
+        const desc = infoPrecio.desc || '';
+
+        return `
+          <div class="card">
+            <div class="card-header">
+              <div class="code-container">
+                <span class="code">${cod}</span>
+              </div>
+              <button class="btn-delete-note" onclick="borrarNota('${cod}')">✓ Borrar</button>
+            </div>
+            ${desc ? `<div class="description">${desc}</div>` : ''}
+            <div class="notes-section" style="border:none; padding:0;">
+              <div class="notes-header">
+                <span class="info-label">Anotación:</span>
+                <span class="time-stamp" id="fecha-${cod}">${objNota.fecha}</span>
+              </div>
+              <textarea oninput="guardarNota('${cod}', this.value)">${objNota.texto}</textarea>
+            </div>
+          </div>
+        `;
+      }).join('');
+      return;
+    }
+
+    if (q === '') {
+      listContainer.innerHTML = '<div class="loader">🔍 Escribí un código, descripción o posición para buscar...</div>';
+      return;
+    }
+
+    const items = (vistaActual === 'deposito') ? stockDepo : sobreStockData;
+    const filtrados = items.filter(item => {
+      const cod = String(item.CODIGO || '').toLowerCase();
+      const desc = String(item.DESCRIPCION || '').toLowerCase();
+      const ubi = String(item.UBICACION || '').toLowerCase();
+      const cajon = String(item.CAJON || '').toLowerCase();
+      return cod.includes(q) || desc.includes(q) || ubi.includes(q) || cajon.includes(q);
+    });
+
+    if (filtrados.length === 0) {
+      listContainer.innerHTML = '<div class="loader">No se encontraron resultados para la búsqueda.</div>';
+      return;
+    }
+
+    const limitados = filtrados.slice(0, 30);
+    const mensajeAviso = filtrados.length > 30 
+      ? `<div style="text-align:center; font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">Mostrando 30 de ${filtrados.length} resultados. Refiná la búsqueda si necesitás.</div>` 
+      : '';
+
+    listContainer.innerHTML = mensajeAviso + limitados.map(item => {
+      const cod = item.CODIGO || 'SIN CÓDIGO';
+      const objNota = misNotas[cod] || { texto: '', fecha: '' };
+      const infoPrecio = preciosMap[cod] || {};
+      const dtoTag = infoPrecio.descuento ? `<span class="disc-tag">D: ${infoPrecio.descuento}</span>` : '';
+
+      if (vistaActual === 'deposito') {
+        const precioUsd = infoPrecio.precioUsd || 0;
+        const precioArs = precioUsd > 0 
+          ? (precioUsd * cotizacion).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) 
+          : 'Consultar';
+
+        const desc = item.DESCRIPCION || infoPrecio.desc || '-';
+        const ubicacion = item.UBICACION || '-';
+        const stock = item.STOCK !== undefined ? item.STOCK : '-';
+
+        return `
+          <div class="card">
+            <div class="card-header">
+              <div class="code-container">
+                <span class="code">${cod}</span>
+                ${dtoTag}
+              </div>
+              <span class="badge">Ubicación: ${ubicacion}</span>
+            </div>
+            <div class="description">${desc}</div>
+            <div class="info-grid">
+              <div class="info-item"><span class="info-label">Stock Depósito</span><strong>${stock}</strong></div>
+              <div class="info-item"><span class="info-label">Precio ARS (USD ${precioUsd})</span><strong>${precioArs}</strong></div>
+            </div>
+            
+            <div class="edit-row">
+              <span class="info-label">Cambiar Posición:</span>
+              <input type="text" id="input-ubi-${cod}" class="edit-input" value="${ubicacion}">
+              <button class="btn-save" onclick="cambiarUbicacion('${cod}', document.getElementById('input-ubi-${cod}').value)">Guardar</button>
+            </div>
+
+            <div class="notes-section">
+              <div class="notes-header">
+                <span class="info-label">Anotación Personal:</span>
+                ${objNota.fecha ? `<span class="time-stamp" id="fecha-${cod}">${objNota.fecha}</span>` : ''}
+              </div>
+              <textarea placeholder="Agregar nota..." oninput="guardarNota('${cod}', this.value)">${objNota.texto}</textarea>
+            </div>
+          </div>
+        `;
+      } else {
+        const cant = item.CANTIDAD !== undefined ? item.CANTIDAD : 0;
+        const cajon = item.CAJON || 'SOBRE STOCK';
+        const ubi = item.UBICACION || '-';
+
+        return `
+          <div class="card">
+            <div class="card-header">
+              <div class="code-container">
+                <span class="code">${cod}</span>
+                ${dtoTag}
+              </div>
+              <span class="badge">${cajon}</span>
+            </div>
+            <div class="info-grid">
+              <div class="info-item"><span class="info-label">Cantidad Actual</span><strong>${cant} unid.</strong></div>
+              <div class="info-item"><span class="info-label">Ubicación Estantería</span><strong>${ubi}</strong></div>
+            </div>
+
+            <div class="edit-row">
+              <span class="info-label">Nueva Cantidad:</span>
+              <input type="number" id="input-cant-${cod}-${cajon}" class="edit-input" style="width: 80px;" value="${cant}">
+              <button class="btn-save" onclick="cambiarCantSobreStock('${cod}', '${cajon}', document.getElementById('input-cant-${cod}-${cajon}').value)">Guardar Cantidad</button>
+            </div>
+
+            <div class="notes-section">
+              <div class="notes-header">
+                <span class="info-label">Anotación / Movimiento:</span>
+                ${objNota.fecha ? `<span class="time-stamp" id="fecha-${cod}">${objNota.fecha}</span>` : ''}
+              </div>
+              <textarea placeholder="Ej: Pasa a cajón sobre stock 5..." oninput="guardarNota('${cod}', this.value)">${objNota.texto}</textarea>
+            </div>
+          </div>
+        `;
+      }
+    }).join('');
+  }
+
+  render();
+</script>
+
+</body>
+</html>
