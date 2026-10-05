@@ -168,7 +168,7 @@
 </div>
 
 <script>
-  const APP_VERSION = '2026-10-05 v4';
+  const APP_VERSION = '2026-10-05 v5';
   const URL_API = 'https://script.google.com/macros/s/AKfycbwY3sVIFHj0Nbymj8P66lrOXABlW_Knh6xIFuY-mU539xOPD8VVk-NPNpR87scLpiTJBg/exec';
 
   if ('serviceWorker' in navigator) {
@@ -272,29 +272,47 @@
   async function enviarOp(op, ms) {
     op.id = 'op' + Date.now() + Math.random().toString(36).slice(2, 8);
     op.dispositivo = nombreDispositivo();
-    let resp = null;
-    try {
-      const r = await fetchConLimite(URL_API, {
-        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ accion: 'sobre', op: op })
-      }, ms || 30000);
-      resp = await r.json();
-    } catch (e) { resp = null; }
-    if (resp) {
-      if (!resp.ok) throw new Error(resp.error || 'Error del servidor');
-      aplicarRespuesta(resp);
-      return resp;
-    }
-    for (let i = 0; i < 4; i++) {
-      await esperar(2500);
+    const limite = ms || 30000;
+    let terminado = false;
+    let envioFallidoEn = 0;
+    // Camino 1: la respuesta directa del envío (a veces Google guarda pero la respuesta no llega)
+    const viaEnvio = (async () => {
       try {
-        const v = await apiGet({ accion: 'op', id: op.id });
-        if (v.aplicada) {
-          const r2 = { ok: true, resultado: v.entrada.resultado || null, entrada: v.entrada, sobre: v.sobre };
-          aplicarRespuesta(r2);
-          return r2;
-        }
-      } catch (e) {}
+        const r = await fetchConLimite(URL_API, {
+          method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ accion: 'sobre', op: op })
+        }, limite);
+        return { tipo: 'envio', resp: await r.json() };
+      } catch (e) { envioFallidoEn = Date.now(); return { tipo: 'fallo' }; }
+    })();
+    // Camino 2: en paralelo, consultar si la operación ya quedó registrada
+    const viaConsulta = (async () => {
+      await esperar(1500);
+      const fin = Date.now() + limite + 10000;
+      while (!terminado && Date.now() < fin) {
+        if (envioFallidoEn && Date.now() - envioFallidoEn > 6000) break;   // el envío falló: no esperar de más
+        try {
+          const v = await apiGet({ accion: 'op', id: op.id }, 15000);
+          if (v.aplicada) return { tipo: 'consulta', v: v };
+        } catch (e) {}
+        await esperar(2000);
+      }
+      return { tipo: 'fallo' };
+    })();
+    const res = await Promise.race([
+      viaEnvio.then(x => x.tipo === 'envio' ? x : viaConsulta),
+      viaConsulta.then(x => x.tipo === 'consulta' ? x : viaEnvio)
+    ]);
+    terminado = true;
+    if (res.tipo === 'envio') {
+      if (!res.resp.ok) throw new Error(res.resp.error || 'Error del servidor');
+      aplicarRespuesta(res.resp);
+      return res.resp;
+    }
+    if (res.tipo === 'consulta') {
+      const r2 = { ok: true, resultado: res.v.entrada.resultado || null, entrada: res.v.entrada, sobre: res.v.sobre };
+      aplicarRespuesta(r2);
+      return r2;
     }
     throw new Error('No hay conexión con Google. El cambio NO se guardó.');
   }
@@ -582,6 +600,7 @@
   async function crearCajon(boton) {
     const nombre = document.getElementById('fNombreCajon').value.trim().toUpperCase();
     if (!nombre) return;
+    if (globalCajones.indexOf(nombre) !== -1) { alert('❌ Ya existe el cajón ' + nombre); return; }
     boton.disabled = true; boton.innerText = 'Guardando…';
     try {
       await enviarOp({ tipo: 'nuevoCajon', nombre: nombre });
@@ -602,6 +621,8 @@
     const ubicacion = document.getElementById('fUbic').value.trim().toUpperCase();
     if (!codigo || codigo.length < 2) { alert('Ingresá el código.'); return; }
     if (isNaN(cantidad) || cantidad < 0) { alert('Cantidad inválida.'); return; }
+    const ya = globalSobreStock.find(x => x.CAJON === cajon && x.CODIGO === codigo);
+    if (ya) { alert(`❌ El código ${codigo} ya está en ${cajon} (cantidad ${ya.CANTIDAD}). Cambiá la cantidad desde la lista.`); return; }
     boton.disabled = true; boton.innerText = 'Guardando…';
     try {
       await enviarOp({ tipo: 'agregarItem', cajon: cajon, codigo: codigo, cantidad: cantidad, ubicacion: ubicacion });
