@@ -309,32 +309,42 @@
       }
     }
 
-    if (headerRowIndex === -1) headerRowIndex = 4;
+    if (headerRowIndex === -1) headerRowIndex = 0;
 
     const rawHeaders = rows[headerRowIndex].map(h => 
-      String(h).trim().toUpperCase()
+      String(h || '').trim().toUpperCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     );
 
-    const headers = rawHeaders.map(h => {
-      if (h === 'CODIGO' || h === 'COD' || h === 'ARTICULO' || h === 'PRODUCTO') return 'CODIGO';
-      if (h === 'DESCRIPCION' || h === 'DETALLE' || h === 'NOMBRE') return 'DESCRIPCION';
-      if (h === 'UBICACION' || h === 'POSICION' || h === 'UBICAC' || h === 'LUGAR') return 'UBICACION';
-      if (h === 'STOCK' || h === 'CANT' || h === 'CANTIDAD') return 'STOCK';
-      if (h === 'CAJON' || h === 'DEPOSITO') return 'CAJON';
-      return h;
-    });
+    const colCodigo = rawHeaders.findIndex(h => h.includes('CODIGO') || h.includes('COD') || h.includes('ARTICULO') || h.includes('PRODUCTO'));
+    const colCant = rawHeaders.findIndex(h => h.includes('CANT') || h.includes('STOCK'));
+    const colUbi = rawHeaders.findIndex(h => h.includes('UBICACION') || h.includes('POSICION') || h.includes('LUGAR'));
+    const colDesc = rawHeaders.findIndex(h => h.includes('DESCRIPCION') || h.includes('DETALLE') || h.includes('NOMBRE'));
 
-    return rows.slice(headerRowIndex + 1).map(row => {
-      let obj = {};
-      headers.forEach((h, i) => {
-        obj[h] = row[i] !== undefined ? String(row[i]).trim() : '';
+    let resultados = [];
+
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+
+      const codVal = colCodigo !== -1 && row[colCodigo] !== undefined ? String(row[colCodigo]).trim() : '';
+      if (!codVal || codVal === 'CODIGO' || codVal === 'CANT.' || codVal.length < 3) continue;
+
+      const cantVal = colCant !== -1 && row[colCant] !== undefined ? String(row[colCant]).trim() : '0';
+      const ubiVal = colUbi !== -1 && row[colUbi] !== undefined ? String(row[colUbi]).trim() : '-';
+      const descVal = colDesc !== -1 && row[colDesc] !== undefined ? String(row[colDesc]).trim() : '';
+
+      resultados.push({
+        CODIGO: codVal,
+        CANTIDAD: parseInt(cantVal) || 0,
+        STOCK: cantVal,
+        UBICACION: ubiVal,
+        DESCRIPCION: descVal,
+        CAJON: nombreHoja || 'SOBRE STOCK'
       });
-      if (!obj.CAJON && nombreHoja) {
-        obj.CAJON = nombreHoja;
-      }
-      return obj;
-    }).filter(item => item.CODIGO && item.CODIGO !== '');
+    }
+
+    return resultados;
   }
 
   function procesarExcelStock(event) {
@@ -575,7 +585,7 @@
           </div>
         `;
       } else {
-        const cant = item.STOCK !== undefined ? item.STOCK : (item.CANTIDAD !== undefined ? item.CANTIDAD : 0);
+        const cant = item.CANTIDAD !== undefined ? item.CANTIDAD : (item.STOCK !== undefined ? item.STOCK : 0);
         const cajon = item.CAJON || 'SOBRE STOCK';
         const ubi = item.UBICACION || '-';
 
