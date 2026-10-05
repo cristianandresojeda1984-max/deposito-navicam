@@ -382,14 +382,17 @@
   function parseSheetRows(rows) {
     if (!rows || rows.length === 0) return [];
 
-    let headerRowIndex = 0;
-    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    let headerRowIndex = -1;
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      if (!rows[i]) continue;
       const rowStr = rows[i].map(c => String(c).toUpperCase()).join(' ');
       if (rowStr.includes('CODIGO') || rowStr.includes('CANT') || rowStr.includes('UBICACION') || rowStr.includes('DESCRIPCION')) {
         headerRowIndex = i;
         break;
       }
     }
+
+    if (headerRowIndex === -1) headerRowIndex = 4;
 
     const rawHeaders = rows[headerRowIndex].map(h => 
       String(h).trim().toUpperCase()
