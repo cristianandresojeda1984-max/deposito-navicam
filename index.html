@@ -105,6 +105,7 @@
   <div class="dollar-box">
     <label>💵 Cotización Dólar (ARS)</label>
     <input type="number" id="cotizacionDolar" value="1250" onchange="guardarCotizacion(this.value)">
+    <div id="estadoDolar" style="font-size:0.72rem; color:var(--text-muted); margin-top:6px;">Conectando…</div>
   </div>
 
   <div class="menu-title">Navegación</div>
@@ -198,11 +199,67 @@
     }
   }
 
-  function guardarCotizacion(val) {
-    cotizacionDolar = parseFloat(val) || 1;
-    localStorage.setItem('navicam_dolar', cotizacionDolar);
-    render();
+  // ===== Dólar compartido entre todos los dispositivos (Google Apps Script) =====
+  const URL_DOLAR = 'https://script.google.com/macros/s/AKfycbxy62HAmxdPQdcgu3mxP9eu6li9ezxGsptRMT9vpWZ0YwiqRcQY_jo0xDkmi7RP7dfysg/exec';
+  let fechaDolarRemoto = '';
+
+  function fetchConLimite(url, opciones, ms) {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), ms || 15000);
+    return fetch(url, Object.assign({}, opciones, { signal: ac.signal })).finally(() => clearTimeout(t));
   }
+
+  function mostrarEstadoDolar(texto, color) {
+    const el = document.getElementById('estadoDolar');
+    if (el) { el.innerText = texto; el.style.color = color || 'var(--text-muted)'; }
+  }
+
+  function aplicarDolar(valor) {
+    if (!(valor > 0)) return;
+    const cambio = valor !== cotizacionDolar;
+    cotizacionDolar = valor;
+    localStorage.setItem('navicam_dolar', cotizacionDolar);
+    const input = document.getElementById('cotizacionDolar');
+    if (input && document.activeElement !== input) input.value = cotizacionDolar;
+    if (cambio) render();
+  }
+
+  async function leerDolarCompartido() {
+    if (!URL_DOLAR.startsWith('https://')) { mostrarEstadoDolar('Solo en este dispositivo (sin conexión configurada)'); return; }
+    try {
+      const r = await fetchConLimite(URL_DOLAR + '?t=' + Date.now(), { cache: 'no-store' });
+      const d = await r.json();
+      if (d.dolar > 0) {
+        aplicarDolar(Number(d.dolar));
+        fechaDolarRemoto = d.fecha || '';
+        mostrarEstadoDolar('✓ Compartido' + (d.fecha ? ' · actualizado ' + d.fecha : ''), '#22c55e');
+      }
+    } catch (e) {
+      mostrarEstadoDolar('⚠️ Sin conexión: usando el último valor guardado', '#f87171');
+    }
+  }
+
+  async function guardarCotizacion(val) {
+    const valor = parseFloat(val);
+    if (!(valor > 0)) { alert('Ingresá un valor de dólar válido.'); document.getElementById('cotizacionDolar').value = cotizacionDolar; return; }
+    aplicarDolar(valor);
+    render();
+    if (!URL_DOLAR.startsWith('https://')) return;
+    mostrarEstadoDolar('Guardando…');
+    try {
+      // text/plain evita el "preflight" CORS que Apps Script no soporta
+      const r = await fetchConLimite(URL_DOLAR, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ dolar: valor }) });
+      const d = await r.json();
+      if (d.ok) mostrarEstadoDolar('✓ Compartido · actualizado ' + (d.fecha || ''), '#22c55e');
+      else throw new Error(d.error || 'respuesta inválida');
+    } catch (e) {
+      mostrarEstadoDolar('⚠️ No se pudo compartir el cambio (' + e.message + '). Solo quedó en este dispositivo.', '#f87171');
+    }
+  }
+
+  leerDolarCompartido();
+  setInterval(leerDolarCompartido, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) leerDolarCompartido(); });
 
   function cambiarVista(vista) {
     vistaActual = vista;
