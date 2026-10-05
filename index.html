@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión Depósito Navicam</title>
+  
+  <!-- Enlace al Manifest PWA -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Navicam">
+
   <!-- SheetJS para procesar Excel (.xlsx) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
@@ -80,7 +88,6 @@
     .info-item { background: #0f172a; padding: 8px; border-radius: 6px; }
     .info-label { font-size: 0.75rem; color: var(--text-muted); display: block; }
 
-    /* Controles de Edición Rápida */
     .edit-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
     .edit-input { background: #0f172a; border: 1px solid var(--border); color: #fbbf24; padding: 6px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9rem; }
     .btn-save { background: var(--accent); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
@@ -152,9 +159,19 @@
 </div>
 
 <script>
+  // Registro mínimo de Service Worker para habilitar la instalación PWA
+  if ('serviceWorker' in navigator) {
+    const swCode = `
+      self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+      self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+      self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
+    `;
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+  }
+
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9jVAQU2ieOwN5_MzA8M7164eVKgigX2ZK479Rgu6mNaimFeYDFGWuFkRccGe5Phv2/exec";
   
-  // Bases de datos locales
   let preciosMap = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
   let stockDepo = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
   let sobreStockData = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
@@ -207,7 +224,6 @@
     return ahora.toLocaleDateString('es-AR') + ' ' + ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  // Modificar Ubicación en Depósito Principal
   function cambiarUbicacion(codigo, nuevaUbi) {
     nuevaUbi = nuevaUbi.trim().toUpperCase();
     const item = stockDepo.find(x => x.CODIGO === codigo);
@@ -219,7 +235,6 @@
     item.UBICACION = nuevaUbi;
     localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
 
-    // Registrar en Historial
     const registro = {
       codigo: codigo,
       tipo: 'Ubicación Depósito',
@@ -233,7 +248,6 @@
     render();
   }
 
-  // Modificar Cantidad en Sobre Stock
   function cambiarCantSobreStock(codigo, cajon, nuevaCant) {
     nuevaCant = parseInt(nuevaCant) || 0;
     const item = sobreStockData.find(x => x.CODIGO === codigo && x.CAJON === cajon);
@@ -245,7 +259,6 @@
     item.CANTIDAD = nuevaCant;
     localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
 
-    // Registrar en Historial
     const registro = {
       codigo: codigo,
       tipo: `Sobre Stock (${cajon})`,
@@ -399,7 +412,6 @@
     const q = document.getElementById('searchInput').value.toLowerCase().trim();
     const listContainer = document.getElementById('contentList');
 
-    // VISTA HISTORIAL DE CAMBIOS
     if (vistaActual === 'historial') {
       const filtradosH = historialCambios.filter(h => 
         h.codigo.toLowerCase().includes(q) || h.detalle.toLowerCase().includes(q) || h.tipo.toLowerCase().includes(q)
@@ -423,7 +435,6 @@
       return;
     }
 
-    // VISTA ANOTACIONES
     if (vistaActual === 'anotaciones') {
       const codigosConNotas = Object.keys(misNotas).filter(cod => misNotas[cod] && misNotas[cod].texto.trim() !== '');
       
@@ -467,7 +478,6 @@
       return;
     }
 
-    // VISTA DEPÓSITO Y SOBRE STOCK
     if (q === '') {
       listContainer.innerHTML = '<div class="loader">🔍 Escribí un código, descripción o posición para buscar...</div>';
       return;
@@ -523,7 +533,6 @@
               <div class="info-item"><span class="info-label">Precio ARS (USD ${precioUsd})</span><strong>${precioArs}</strong></div>
             </div>
             
-            <!-- Edición Rápida de Ubicación -->
             <div class="edit-row">
               <span class="info-label">Cambiar Posición:</span>
               <input type="text" id="input-ubi-${cod}" class="edit-input" value="${ubicacion}">
@@ -557,7 +566,6 @@
               <div class="info-item"><span class="info-label">Cantidad Actual</span><strong>${cant} unid.</strong></div>
             </div>
 
-            <!-- Edición Rápida de Cantidad Sobre Stock -->
             <div class="edit-row">
               <span class="info-label">Nueva Cantidad:</span>
               <input type="number" id="input-cant-${cod}-${cajon}" class="edit-input" style="width: 80px;" value="${cant}">
@@ -577,7 +585,6 @@
     }).join('');
   }
 
-  // Inicialización
   cargarDatosDrive();
 </script>
 
