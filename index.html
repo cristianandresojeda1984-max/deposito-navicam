@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión Depósito Navicam</title>
-  
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -19,7 +19,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
     body { background-color: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; }
     .container { max-width: 600px; margin: 0 auto; }
-    
+
     header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
     .menu-btn { font-size: 1.8rem; background: none; border: none; color: #fbbf24; cursor: pointer; padding: 4px 8px; }
     h1 { font-size: 1.2rem; color: #fbbf24; text-align: center; flex: 1; }
@@ -44,7 +44,7 @@
       border: 1px solid var(--border); cursor: pointer; font-size: 0.9rem;
     }
     .menu-item:hover { border-color: var(--accent); }
-    
+
     .dollar-box { background: #0f172a; padding: 12px; border-radius: 6px; border: 1px solid var(--accent); }
     .dollar-box label { font-size: 0.8rem; color: #fbbf24; display: block; margin-bottom: 6px; font-weight: bold; }
     .dollar-box input { width: 100%; padding: 8px; background: var(--card-bg); border: 1px solid var(--border); color: #fff; border-radius: 4px; font-size: 1rem; }
@@ -55,17 +55,19 @@
       margin-bottom: 16px; font-size: 0.85rem; border: 1px solid var(--border); flex-wrap: wrap; gap: 4px;
     }
     .status-indicator { display: flex; align-items: center; gap: 6px; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #eab308; flex-shrink: 0; }
 
     .search-box { margin-bottom: 16px; }
-    input[type="text"], input[type="number"] {
+    input[type="text"], input[type="number"], select {
       width: 100%; padding: 10px; border-radius: 8px;
       border: 1px solid var(--border); background: var(--card-bg);
       color: #fff; font-size: 1rem; outline: none;
     }
-    input[type="text"]:focus, input[type="number"]:focus { border-color: var(--accent); }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus { border-color: var(--accent); }
 
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+    .card-click { cursor: pointer; }
+    .card-click:hover { border-color: var(--accent); }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
     .code-container { display: flex; align-items: center; gap: 8px; }
     .code { font-weight: bold; font-size: 1.15rem; color: #38bdf8; }
@@ -77,10 +79,17 @@
     .info-item { background: #0f172a; padding: 8px; border-radius: 6px; }
     .info-label { font-size: 0.75rem; color: var(--text-muted); display: block; }
 
-    .edit-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .edit-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
     .edit-input { background: #0f172a; border: 1px solid var(--border); color: #fbbf24; padding: 6px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9rem; }
-    .btn-save { background: var(--accent); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
+    .btn-save { background: var(--accent); color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
     .btn-save:hover { background: var(--accent-hover); }
+    .btn-save:disabled { opacity: 0.5; cursor: wait; }
+    .btn-sec { background: #334155; color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+    .btn-del { background: #7f1d1d; color: #fff; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+
+    .form-grid { display: grid; gap: 8px; margin-top: 12px; }
+    .form-grid label { font-size: 0.75rem; color: var(--text-muted); }
+    .hint { font-size: 0.75rem; color: #38bdf8; min-height: 1em; }
 
     .notes-section { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
     .notes-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
@@ -94,6 +103,8 @@
     }
 
     .loader { text-align: center; padding: 30px 10px; color: var(--text-muted); font-size: 0.95rem; }
+    .lista-mini { font-size: 0.8rem; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+    .version { text-align: center; font-size: 0.7rem; color: var(--text-muted); margin-top: 24px; }
     input[type="file"] { display: none; }
   </style>
 </head>
@@ -119,6 +130,11 @@
   <div class="menu-item" onclick="document.getElementById('fileSobre').click()">📑 Cargar Sobre Stock (.xlsx)</div>
   <div class="menu-item" onclick="document.getElementById('filePrecio').click()">📥 Cargar Lista de Precios (.xlsx)</div>
 
+  <div class="menu-title">Exportar a Excel</div>
+  <div class="menu-item" onclick="exportarSobre()">📤 Sobre Stock + Registro</div>
+  <div class="menu-item" onclick="exportarStock()">📤 Stock Depósito</div>
+  <div class="menu-item" onclick="exportarHistorial()">📤 Historial y Anotaciones</div>
+
   <input type="file" id="fileStock" accept=".xlsx, .xls" onchange="procesarStock(event)">
   <input type="file" id="fileSobre" accept=".xlsx, .xls" onchange="procesarSobreStock(event)">
   <input type="file" id="filePrecio" accept=".xlsx, .xls" onchange="procesarPrecios(event)">
@@ -132,11 +148,13 @@
 
   <div class="status-bar">
     <div class="status-indicator">
-      <span class="dot"></span>
-      <span>Sistema Activo</span>
+      <span class="dot" id="dotSync"></span>
+      <span id="textoSync">Conectando…</span>
     </div>
     <span id="resumenCarga" style="font-size:0.75rem; color:var(--text-muted);">Stock: 0 | SobreStock: 0 | Precios: 0</span>
   </div>
+
+  <div id="panelSobre" style="display:none;"></div>
 
   <div class="search-box">
     <input type="text" id="searchInput" placeholder="Buscar por código, descripción o posición..." oninput="render()">
@@ -145,14 +163,19 @@
   <div id="contentList">
     <div class="loader">Escribí un código, descripción o posición para buscar...</div>
   </div>
+
+  <div class="version" id="versionApp"></div>
 </div>
 
 <script>
+  const APP_VERSION = '2026-10-05 v4';
+  const URL_API = 'https://script.google.com/macros/s/AKfycbxy62HAmxdPQdcgu3mxP9eu6li9ezxGsptRMT9vpWZ0YwiqRcQY_jo0xDkmi7RP7dfysg/exec';
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); }).catch(() => {});
   }
 
-  // Lectura segura: si un dato guardado está dañado, no rompe toda la app
+  // ===================== Almacenamiento local (copia para usar sin conexión) =====================
   function leerLS(clave, porDefecto) {
     try {
       const v = localStorage.getItem(clave);
@@ -163,33 +186,51 @@
     }
   }
 
-  // Guardado seguro: avisa si el navegador se queda sin espacio
+  // Devuelve false si el navegador no tiene espacio (los datos siguen en memoria)
   function guardarLS(clave, valor) {
     try {
       localStorage.setItem(clave, JSON.stringify(valor));
       return true;
     } catch (e) {
-      alert('⚠️ No se pudo guardar "' + clave + '" en el navegador (sin espacio). Los datos se ven ahora pero se perderán al recargar.');
+      console.warn('Sin espacio para guardar ' + clave, e);
+      try { localStorage.removeItem(clave); } catch (e2) {}
       return false;
     }
   }
 
-  // Almacenamiento global
   let globalPrecios = leerLS('navicam_precios', {});
   let globalStock = leerLS('navicam_stock', []);
   let globalSobreStock = leerLS('navicam_sobre', []);
+  let globalCajones = leerLS('navicam_cajones', []);
+  let globalUbic = leerLS('navicam_ubic', {});            // ubicaciones cambiadas desde la app (compartidas)
+  let globalRegistro = leerLS('navicam_registro', []);    // registro compartido
   let globalNotas = leerLS('navicam_notas_v2', {});
-  let globalHistorial = leerLS('navicam_historial', []);
-  
+  let globalHistorial = leerLS('navicam_historial', []);  // historial local anterior
+  let metasLocales = leerLS('navicam_metas', { stock: 0, precios: 0 });
+  let versionSobre = leerLS('navicam_sobre_version', -1);
+
   let vistaActual = 'deposito';
+  let cajonSel = '';
+  let formSobre = '';
   let cotizacionDolar = parseFloat(localStorage.getItem('navicam_dolar') || '1250');
 
   document.getElementById('cotizacionDolar').value = cotizacionDolar;
+  document.getElementById('versionApp').innerText = 'Versión ' + APP_VERSION;
   actualizarEstadoCarga();
+
+  function esc(s) {
+    return String(s === undefined || s === null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   function toggleMenu() {
     document.getElementById('drawer').classList.toggle('open');
     document.getElementById('overlay').classList.toggle('active');
+  }
+
+  function cerrarMenu() {
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('overlay').classList.remove('active');
   }
 
   function actualizarEstadoCarga() {
@@ -199,16 +240,146 @@
     }
   }
 
-  // ===== Dólar compartido entre todos los dispositivos (Google Apps Script) =====
-  const URL_DOLAR = 'https://script.google.com/macros/s/AKfycbxy62HAmxdPQdcgu3mxP9eu6li9ezxGsptRMT9vpWZ0YwiqRcQY_jo0xDkmi7RP7dfysg/exec';
-  let fechaDolarRemoto = '';
+  function obtenerFechaHoraActual() {
+    const ah = new Date();
+    return ah.toLocaleDateString('es-AR') + ' ' + ah.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  }
 
+  function ubicacionDe(item) {
+    return globalUbic[item.CODIGO] || item.UBICACION || '-';
+  }
+
+  // ===================== Conexión con Google (servidor compartido) =====================
   function fetchConLimite(url, opciones, ms) {
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), ms || 15000);
     return fetch(url, Object.assign({}, opciones, { signal: ac.signal })).finally(() => clearTimeout(t));
   }
 
+  async function apiGet(params, ms) {
+    const qs = Object.entries(params).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+    const r = await fetchConLimite(URL_API + '?' + qs + '&t=' + Date.now(), { cache: 'no-store' }, ms || 20000);
+    return r.json();
+  }
+
+  const esperar = ms => new Promise(res => setTimeout(res, ms));
+
+  function nombreDispositivo() {
+    return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'Celular' : 'PC';
+  }
+
+  // Envía una operación al servidor. Si la respuesta no llega, confirma leyendo el registro.
+  async function enviarOp(op, ms) {
+    op.id = 'op' + Date.now() + Math.random().toString(36).slice(2, 8);
+    op.dispositivo = nombreDispositivo();
+    let resp = null;
+    try {
+      const r = await fetchConLimite(URL_API, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ accion: 'sobre', op: op })
+      }, ms || 30000);
+      resp = await r.json();
+    } catch (e) { resp = null; }
+    if (resp) {
+      if (!resp.ok) throw new Error(resp.error || 'Error del servidor');
+      aplicarRespuesta(resp);
+      return resp;
+    }
+    for (let i = 0; i < 4; i++) {
+      await esperar(2500);
+      try {
+        const v = await apiGet({ accion: 'op', id: op.id });
+        if (v.aplicada) {
+          const r2 = { ok: true, resultado: v.entrada.resultado || null, entrada: v.entrada, sobre: v.sobre };
+          aplicarRespuesta(r2);
+          return r2;
+        }
+      } catch (e) {}
+    }
+    throw new Error('No hay conexión con Google. El cambio NO se guardó.');
+  }
+
+  function aplicarRespuesta(resp) {
+    if (resp.sobre) aplicarSobre(resp.sobre);
+    if (resp.entrada && !globalRegistro.some(r => r.id === resp.entrada.id)) {
+      globalRegistro.unshift(resp.entrada);
+      guardarLS('navicam_registro', globalRegistro.slice(0, 500));
+    }
+    if (resp.resultado && resp.resultado.ubicaciones) {
+      globalUbic = resp.resultado.ubicaciones;
+      guardarLS('navicam_ubic', globalUbic);
+    }
+  }
+
+  function aplicarSobre(sobre) {
+    if (!sobre) return;
+    globalSobreStock = sobre.items || [];
+    globalCajones = sobre.cajones || [];
+    versionSobre = sobre.version || 0;
+    guardarLS('navicam_sobre', globalSobreStock);
+    guardarLS('navicam_cajones', globalCajones);
+    guardarLS('navicam_sobre_version', versionSobre);
+    if (cajonSel && globalCajones.indexOf(cajonSel) === -1) cajonSel = '';
+    actualizarEstadoCarga();
+  }
+
+  let estadoSync = { ok: null, hora: '', mensaje: 'Conectando…' };
+
+  function pintarEstadoSync() {
+    const dot = document.getElementById('dotSync'), txt = document.getElementById('textoSync');
+    if (estadoSync.ok === true) { dot.style.background = '#22c55e'; txt.innerText = 'Sincronizado ' + estadoSync.hora; }
+    else if (estadoSync.ok === false) { dot.style.background = '#ef4444'; txt.innerText = 'Sin conexión con Google'; }
+    else { dot.style.background = '#eab308'; txt.innerText = estadoSync.mensaje; }
+  }
+
+  let sincronizando = false;
+  async function sincronizar() {
+    if (sincronizando) return;
+    sincronizando = true;
+    try {
+      const d = await apiGet({ accion: 'estado' });
+      if (d.dolar > 0) {
+        aplicarDolar(Number(d.dolar));
+        mostrarEstadoDolar('✓ Compartido' + (d.fecha ? ' · actualizado ' + d.fecha : ''), '#22c55e');
+      }
+      if (d.sobre && d.sobre.version !== versionSobre) aplicarSobre(d.sobre);
+      if (d.ubicaciones) { globalUbic = d.ubicaciones; guardarLS('navicam_ubic', globalUbic); }
+      const metas = d.metas || {};
+      await bajarSiCambio('stock', metas.stock);
+      await bajarSiCambio('precios', metas.precios);
+      estadoSync = { ok: true, hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) };
+    } catch (e) {
+      console.warn('Sincronización fallida', e);
+      estadoSync = { ok: false };
+      mostrarEstadoDolar('⚠️ Sin conexión: usando el último valor guardado', '#f87171');
+    }
+    sincronizando = false;
+    pintarEstadoSync();
+    renderSeguro();
+  }
+
+  // Baja stock / precios solo si en Google hay una versión distinta a la de este dispositivo
+  async function bajarSiCambio(tipo, meta) {
+    if (!meta || meta.version === metasLocales[tipo]) return;
+    estadoSync = { ok: null, mensaje: 'Descargando ' + (tipo === 'stock' ? 'stock' : 'lista de precios') + '…' };
+    pintarEstadoSync();
+    const d = await apiGet({ accion: 'datos', tipo: tipo }, 120000);
+    if (!d || !d.datos) return;
+    if (tipo === 'stock') {
+      globalStock = d.datos.map(r => ({ CODIGO: r[0], DESCRIPCION: r[1], STOCK: r[2], UBICACION: r[3] }));
+      if (!guardarLS('navicam_stock', globalStock)) { actualizarEstadoCarga(); return; }
+    } else {
+      const p = {};
+      Object.keys(d.datos).forEach(c => { const v = d.datos[c]; p[c] = { precioUsd: v[0], desc: v[1], descuento: v[2] }; });
+      globalPrecios = p;
+      if (!guardarLS('navicam_precios', globalPrecios)) { actualizarEstadoCarga(); return; }
+    }
+    metasLocales[tipo] = d.meta ? d.meta.version : meta.version;
+    guardarLS('navicam_metas', metasLocales);
+    actualizarEstadoCarga();
+  }
+
+  // ===================== Dólar compartido =====================
   function mostrarEstadoDolar(texto, color) {
     const el = document.getElementById('estadoDolar');
     if (el) { el.innerText = texto; el.style.color = color || 'var(--text-muted)'; }
@@ -221,22 +392,7 @@
     localStorage.setItem('navicam_dolar', cotizacionDolar);
     const input = document.getElementById('cotizacionDolar');
     if (input && document.activeElement !== input) input.value = cotizacionDolar;
-    if (cambio) render();
-  }
-
-  async function leerDolarCompartido() {
-    if (!URL_DOLAR.startsWith('https://')) { mostrarEstadoDolar('Solo en este dispositivo (sin conexión configurada)'); return; }
-    try {
-      const r = await fetchConLimite(URL_DOLAR + '?t=' + Date.now(), { cache: 'no-store' });
-      const d = await r.json();
-      if (d.dolar > 0) {
-        aplicarDolar(Number(d.dolar));
-        fechaDolarRemoto = d.fecha || '';
-        mostrarEstadoDolar('✓ Compartido' + (d.fecha ? ' · actualizado ' + d.fecha : ''), '#22c55e');
-      }
-    } catch (e) {
-      mostrarEstadoDolar('⚠️ Sin conexión: usando el último valor guardado', '#f87171');
-    }
+    if (cambio) renderSeguro();
   }
 
   async function guardarCotizacion(val) {
@@ -244,32 +400,26 @@
     if (!(valor > 0)) { alert('Ingresá un valor de dólar válido.'); document.getElementById('cotizacionDolar').value = cotizacionDolar; return; }
     aplicarDolar(valor);
     render();
-    if (!URL_DOLAR.startsWith('https://')) return;
     mostrarEstadoDolar('Guardando…');
     try {
       // text/plain evita el "preflight" CORS que Apps Script no soporta
-      const r = await fetchConLimite(URL_DOLAR, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ dolar: valor }) });
+      const r = await fetchConLimite(URL_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ dolar: valor }) });
       const d = await r.json();
       if (d.ok) { mostrarEstadoDolar('✓ Compartido · actualizado ' + (d.fecha || ''), '#22c55e'); return; }
     } catch (e) {
       // A veces Google guarda el valor pero la respuesta no llega: se confirma leyendo abajo
     }
-    // Confirmación: se lee el valor del servidor (hasta 3 intentos)
     for (let intento = 0; intento < 3; intento++) {
       try {
-        const r = await fetchConLimite(URL_DOLAR + '?t=' + Date.now(), { cache: 'no-store' });
-        const d = await r.json();
+        const d = await apiGet({ accion: 'dolar' });
         if (Number(d.dolar) === valor) { mostrarEstadoDolar('✓ Compartido · actualizado ' + (d.fecha || ''), '#22c55e'); return; }
       } catch (e) {}
-      await new Promise(res => setTimeout(res, 2000));
+      await esperar(2000);
     }
     mostrarEstadoDolar('⚠️ No se pudo compartir el cambio. Solo quedó en este dispositivo.', '#f87171');
   }
 
-  leerDolarCompartido();
-  setInterval(leerDolarCompartido, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) leerDolarCompartido(); });
-
+  // ===================== Navegación =====================
   function cambiarVista(vista) {
     vistaActual = vista;
     const titulos = {
@@ -281,63 +431,195 @@
     document.getElementById('tituloSeccion').innerText = titulos[vista];
     const searchInput = document.getElementById('searchInput');
     searchInput.value = '';
+    cajonSel = '';
+    formSobre = '';
 
     if (vista === 'anotaciones') searchInput.placeholder = "Buscar en anotaciones...";
     else if (vista === 'historial') searchInput.placeholder = "Buscar en historial de cambios...";
+    else if (vista === 'sobreStock') searchInput.placeholder = "Buscar código, ubicación o cajón...";
     else searchInput.placeholder = "Buscar por código, descripción o posición...";
 
-    toggleMenu();
+    cerrarMenu();
     render();
+    if (vista === 'historial') refrescarRegistro();
   }
 
-  function obtenerFechaHoraActual() {
-    const ah = new Date();
-    return ah.toLocaleDateString('es-AR') + ' ' + ah.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  async function refrescarRegistro() {
+    try {
+      const d = await apiGet({ accion: 'registro' });
+      if (Array.isArray(d.registro)) {
+        globalRegistro = d.registro;
+        guardarLS('navicam_registro', globalRegistro);
+        if (vistaActual === 'historial') render();
+      }
+    } catch (e) {}
   }
 
-  function cambiarUbicacion(codigo, nuevaUbi) {
-    nuevaUbi = nuevaUbi.trim().toUpperCase();
+  // ===================== Acciones compartidas =====================
+  async function cambiarUbicacion(codigo, nuevaUbi, boton) {
+    nuevaUbi = String(nuevaUbi || '').trim().toUpperCase();
     const item = globalStock.find(x => x.CODIGO === codigo);
-    if (!item) return;
-
-    const anterior = item.UBICACION || 'SIN ASIGNAR';
+    if (!item || !nuevaUbi) return;
+    const anterior = ubicacionDe(item);
     if (anterior === nuevaUbi) return;
-
-    item.UBICACION = nuevaUbi;
-    guardarLS('navicam_stock', globalStock);
-
-    globalHistorial.unshift({
-      codigo: codigo,
-      tipo: 'UBICACION',
-      detalle: `Ubicación actual ${nuevaUbi}, ubicación anterior ${anterior}`,
-      fecha: obtenerFechaHoraActual()
-    });
-    guardarLS('navicam_historial', globalHistorial);
-
-    alert(`Ubicación actualizada: ${codigo} ➔ ${nuevaUbi}`);
+    if (boton) { boton.disabled = true; boton.innerText = 'Guardando…'; }
+    try {
+      await enviarOp({ tipo: 'cambiarUbicacion', codigo: codigo, anterior: anterior, nueva: nuevaUbi });
+      alert(`✅ Ubicación actualizada (en todos los dispositivos): ${codigo} ➔ ${nuevaUbi}`);
+    } catch (e) {
+      alert('❌ ' + e.message);
+    }
     render();
   }
 
-  function cambiarCantSobreStock(codigo, cajon, nuevaCant) {
-    nuevaCant = parseInt(nuevaCant) || 0;
-    const item = globalSobreStock.find(x => x.CODIGO === codigo && x.CAJON === cajon);
+  async function cambiarCantSobreStock(idx, boton) {
+    const item = itemsVista[idx];
     if (!item) return;
+    const nuevaCant = parseInt(document.getElementById('cant-' + idx).value);
+    if (isNaN(nuevaCant) || nuevaCant < 0) { alert('Cantidad inválida'); return; }
+    if (nuevaCant === item.CANTIDAD) return;
+    boton.disabled = true; boton.innerText = 'Guardando…';
+    try {
+      await enviarOp({ tipo: 'cambiarCant', cajon: item.CAJON, codigo: item.CODIGO, cantidad: nuevaCant });
+      alert(`✅ ${item.CODIGO} en ${item.CAJON}: ${item.CANTIDAD} ➔ ${nuevaCant} unid.`);
+    } catch (e) {
+      alert('❌ ' + e.message);
+    }
+    render();
+  }
 
-    const anterior = item.CANTIDAD || 0;
-    if (anterior === nuevaCant) return;
+  async function eliminarArticulo(idx, boton) {
+    const item = itemsVista[idx];
+    if (!item) return;
+    if (!confirm(`¿Eliminar ${item.CODIGO} de ${item.CAJON}?`)) return;
+    boton.disabled = true;
+    try {
+      await enviarOp({ tipo: 'eliminarItem', cajon: item.CAJON, codigo: item.CODIGO });
+    } catch (e) {
+      alert('❌ ' + e.message);
+    }
+    render();
+  }
 
-    item.CANTIDAD = nuevaCant;
-    guardarLS('navicam_sobre', globalSobreStock);
+  async function eliminarCajon(nombre) {
+    if (!confirm(`¿Eliminar el cajón ${nombre}? (está vacío)`)) return;
+    try {
+      await enviarOp({ tipo: 'eliminarCajon', nombre: nombre });
+    } catch (e) {
+      alert('❌ ' + e.message);
+    }
+    render();
+  }
 
-    globalHistorial.unshift({
-      codigo: codigo,
-      tipo: 'SOBRE_STOCK',
-      detalle: `Cajón ${cajon}: Cantidad actual ${nuevaCant}, cantidad anterior ${anterior}`,
-      fecha: obtenerFechaHoraActual()
-    });
-    guardarLS('navicam_historial', globalHistorial);
+  function siguienteNombreCajon() {
+    let max = 0;
+    globalCajones.forEach(c => { const m = c.match(/SOBRE STOCK\s+(\d+)\s*$/); if (m) max = Math.max(max, parseInt(m[1])); });
+    return 'CAJON SOBRE STOCK ' + (max + 1);
+  }
 
-    alert(`Cantidad sobre stock actualizada: ${codigo} ➔ ${nuevaCant} unid.`);
+  function mostrarForm(tipo) {
+    formSobre = formSobre === tipo ? '' : tipo;
+    pintarPanelSobre();
+    const foco = document.getElementById(tipo === 'cajon' ? 'fNombreCajon' : 'fCodigo');
+    if (foco) foco.focus();
+  }
+
+  function pintarPanelSobre() {
+    const panel = document.getElementById('panelSobre');
+    if (vistaActual !== 'sobreStock') { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+    panel.style.display = 'block';
+    let form = '';
+    if (formSobre === 'cajon') {
+      form = `
+        <div class="form-grid">
+          <label>Nombre del cajón nuevo</label>
+          <input type="text" id="fNombreCajon" value="${esc(siguienteNombreCajon())}">
+          <button class="btn-save" onclick="crearCajon(this)">Crear cajón</button>
+        </div>`;
+    } else if (formSobre === 'item') {
+      if (globalCajones.length === 0) {
+        form = '<div class="lista-mini">Primero creá un cajón.</div>';
+      } else {
+        const opciones = globalCajones.map(c => `<option value="${esc(c)}" ${c === cajonSel ? 'selected' : ''}>${esc(c)}</option>`).join('');
+        form = `
+          <div class="form-grid">
+            <label>Cajón</label>
+            <select id="fCajon">${opciones}</select>
+            <label>Código</label>
+            <input type="text" id="fCodigo" autocomplete="off" oninput="pistaCodigo(this.value)">
+            <div class="hint" id="fPista"></div>
+            <label>Cantidad</label>
+            <input type="number" id="fCant" min="0" value="1">
+            <label>Ubicación en estantería</label>
+            <input type="text" id="fUbic" autocomplete="off">
+            <button class="btn-save" onclick="agregarArticulo(this)">Agregar al cajón</button>
+          </div>`;
+      }
+    }
+    panel.innerHTML = `
+      <div class="card">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-save" onclick="mostrarForm('cajon')">➕ Nuevo cajón</button>
+          <button class="btn-save" onclick="mostrarForm('item')">➕ Agregar artículo</button>
+          ${formSobre ? '<button class="btn-sec" onclick="mostrarForm(\'\')">Cancelar</button>' : ''}
+        </div>
+        ${form}
+      </div>`;
+  }
+
+  function pistaCodigo(v) {
+    const cod = String(v || '').trim().toUpperCase();
+    const el = document.getElementById('fPista');
+    if (!el) return;
+    if (cod.length < 3) { el.innerText = ''; return; }
+    const st = globalStock.find(x => x.CODIGO === cod);
+    const pr = globalPrecios[cod];
+    const desc = (st && st.DESCRIPCION) || (pr && pr.desc) || '';
+    const ya = globalSobreStock.filter(x => x.CODIGO === cod).map(x => x.CAJON + ' (' + x.CANTIDAD + ')');
+    el.innerText = (desc ? desc : 'Código no encontrado en stock/precios') + (ya.length ? ' · Ya está en: ' + ya.join(', ') : '');
+  }
+
+  async function crearCajon(boton) {
+    const nombre = document.getElementById('fNombreCajon').value.trim().toUpperCase();
+    if (!nombre) return;
+    boton.disabled = true; boton.innerText = 'Guardando…';
+    try {
+      await enviarOp({ tipo: 'nuevoCajon', nombre: nombre });
+      cajonSel = nombre;
+      formSobre = 'item';
+      alert(`✅ Cajón creado: ${nombre}`);
+    } catch (e) {
+      alert('❌ ' + e.message);
+    }
+    pintarPanelSobre();
+    render();
+  }
+
+  async function agregarArticulo(boton) {
+    const cajon = document.getElementById('fCajon').value;
+    const codigo = document.getElementById('fCodigo').value.trim().toUpperCase();
+    const cantidad = parseInt(document.getElementById('fCant').value);
+    const ubicacion = document.getElementById('fUbic').value.trim().toUpperCase();
+    if (!codigo || codigo.length < 2) { alert('Ingresá el código.'); return; }
+    if (isNaN(cantidad) || cantidad < 0) { alert('Cantidad inválida.'); return; }
+    boton.disabled = true; boton.innerText = 'Guardando…';
+    try {
+      await enviarOp({ tipo: 'agregarItem', cajon: cajon, codigo: codigo, cantidad: cantidad, ubicacion: ubicacion });
+      cajonSel = cajon;
+      alert(`✅ ${codigo} agregado a ${cajon}: ${cantidad} unid.`);
+      pintarPanelSobre();
+      const c = document.getElementById('fCodigo'); if (c) c.focus();
+    } catch (e) {
+      alert('❌ ' + e.message);
+      boton.disabled = false; boton.innerText = 'Agregar al cajón';
+    }
+    render();
+  }
+
+  function seleccionarCajon(nombre) {
+    cajonSel = nombre;
+    document.getElementById('searchInput').value = '';
+    pintarPanelSobre();
     render();
   }
 
@@ -358,7 +640,7 @@
     render();
   }
 
-  // ===== Importación de Excel: las columnas se ubican por el nombre del encabezado =====
+  // ===================== Importación de Excel (columnas por nombre de encabezado) =====================
   function normalizar(v) {
     return String(v === undefined || v === null ? '' : v)
       .normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
@@ -371,8 +653,6 @@
     return s;
   }
 
-  // Busca la fila de encabezado y devuelve {fila, col: {nombre: índice}}
-  // 'campos' = { nombre: ['texto encabezado 1', 'alternativa', ...] }; 'obligatorio' = campo que debe existir
   function buscarEncabezado(rows, campos, obligatorio) {
     for (let i = 0; i < Math.min(rows.length, 40); i++) {
       const r = rows[i] || [];
@@ -389,13 +669,15 @@
 
   function leerExcel(file, alTerminar, etiqueta) {
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
       try {
         const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-        alTerminar(wb);
+        await alTerminar(wb);
       } catch (err) {
         alert('❌ Error al procesar ' + etiqueta + ': ' + err.message);
       }
+      estadoSync = estadoSync.ok === null ? { ok: true, hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) } : estadoSync;
+      pintarEstadoSync();
     };
     reader.readAsArrayBuffer(file);
   }
@@ -404,10 +686,16 @@
     return XLSX.utils.sheet_to_json(wb.Sheets[nombre], { header: 1, defval: '' });
   }
 
+  function avisoSubiendo(texto) {
+    estadoSync = { ok: null, mensaje: texto };
+    pintarEstadoSync();
+  }
+
   function procesarStock(event) {
     const file = event.target.files[0];
     if (!file) return;
-    leerExcel(file, wb => {
+    cerrarMenu();
+    leerExcel(file, async wb => {
       const campos = {
         codigo: ['codigo', 'articulo', 'cod'],
         descripcion: ['descripcion', 'denominacion'],
@@ -415,11 +703,10 @@
         stock: ['stock', 'cantidad', 'cant.', 'cant']
       };
       let acumulado = [];
-      let hojasSinEncabezado = [];
       wb.SheetNames.forEach(sheetName => {
         const rows = hojaComoFilas(wb, sheetName);
         const enc = buscarEncabezado(rows, campos, 'codigo');
-        if (!enc) { hojasSinEncabezado.push(sheetName); return; }
+        if (!enc) return;
         const c = enc.col;
         for (let i = enc.fila + 1; i < rows.length; i++) {
           const r = rows[i];
@@ -440,9 +727,25 @@
       globalStock = acumulado;
       guardarLS('navicam_stock', globalStock);
       actualizarEstadoCarga();
-      toggleMenu();
       render();
-      alert(`✅ Stock de Depósito cargado correctamente: ${globalStock.length} artículos.`);
+      avisoSubiendo('Subiendo stock a Google…');
+      try {
+        const contenido = JSON.stringify(acumulado.map(x => [x.CODIGO, x.DESCRIPCION, x.STOCK, x.UBICACION]));
+        const resp = await enviarOp({ tipo: 'subirDatos', tipoDatos: 'stock', archivo: file.name, contenido: contenido }, 120000);
+        const res = resp.resultado || {};
+        if (res.meta) { metasLocales.stock = res.meta.version; guardarLS('navicam_metas', metasLocales); }
+        globalUbic = {}; guardarLS('navicam_ubic', globalUbic);
+        let msg = `✅ Stock cargado y compartido: ${acumulado.length} artículos.`;
+        if (res.totalConflictos) {
+          msg += `\n\n⚠️ ${res.totalConflictos} ubicaciones que se habían cambiado en la app fueron reemplazadas por las del Excel:\n` +
+            (res.conflictosUbicacion || []).slice(0, 15).map(x => `• ${x.codigo}: app ${x.app} → Excel ${x.excel}`).join('\n') +
+            (res.totalConflictos > 15 ? `\n… y ${res.totalConflictos - 15} más (ver Historial).` : '');
+        }
+        alert(msg);
+      } catch (e) {
+        alert(`⚠️ Stock cargado en ESTE dispositivo (${acumulado.length} artículos), pero no se pudo compartir: ${e.message}`);
+      }
+      render();
     }, 'Stock');
     event.target.value = '';
   }
@@ -450,7 +753,8 @@
   function procesarSobreStock(event) {
     const file = event.target.files[0];
     if (!file) return;
-    leerExcel(file, wb => {
+    cerrarMenu();
+    leerExcel(file, async wb => {
       const campos = {
         codigo: ['codigo', 'articulo', 'cod'],
         cantidad: ['cant.', 'cant', 'cantidad', 'stock'],
@@ -459,6 +763,7 @@
       let acumulado = [];
       let hojasSinEncabezado = [];
       wb.SheetNames.forEach(sheetName => {
+        if (normalizar(sheetName) === 'registro') return;   // hoja de registro de una exportación
         const rows = hojaComoFilas(wb, sheetName);
         const enc = buscarEncabezado(rows, campos, 'codigo');
         if (!enc) { hojasSinEncabezado.push(sheetName); return; }
@@ -480,13 +785,28 @@
         alert('❌ No se encontró una fila de encabezado con "Codigo" en ninguna hoja de Sobre Stock.');
         return;
       }
-      globalSobreStock = acumulado;
-      guardarLS('navicam_sobre', globalSobreStock);
-      actualizarEstadoCarga();
-      toggleMenu();
+      avisoSubiendo('Subiendo sobre stock a Google…');
+      try {
+        const resp = await enviarOp({ tipo: 'importar', archivo: file.name, items: acumulado }, 60000);
+        const res = resp.resultado || {};
+        const conCambio = (res.listaRepetidos || []).filter(x => x.cambio);
+        let msg = `✅ Sobre Stock importado (${file.name}):\n• ${res.agregados} artículos nuevos`;
+        if (res.cajonesNuevos && res.cajonesNuevos.length) msg += `\n• ${res.cajonesNuevos.length} cajones nuevos`;
+        if (res.repetidos) {
+          msg += `\n\n⚠️ ${res.repetidos} artículos REPETIDOS (ya estaban en el mismo cajón).`;
+          msg += `\n• ${res.repetidos - res.actualizados} sin diferencias`;
+          if (res.actualizados) {
+            msg += `\n• ${res.actualizados} con diferencias → se tomó el valor del Excel:`;
+            msg += '\n' + conCambio.slice(0, 15).map(x => `  ${x.codigo} (${x.cajon}): cant ${x.cantAnterior}→${x.cantNueva}` + (x.ubiAnterior !== x.ubiNueva ? `, ubic ${x.ubiAnterior}→${x.ubiNueva}` : '')).join('\n');
+            if (conCambio.length > 15) msg += `\n  … y ${conCambio.length - 15} más (ver Historial).`;
+          }
+        }
+        if (hojasSinEncabezado.length) msg += `\n\nHojas omitidas (sin encabezado "Codigo"): ${hojasSinEncabezado.join(', ')}`;
+        alert(msg);
+      } catch (e) {
+        alert('❌ No se pudo importar el Sobre Stock: ' + e.message);
+      }
       render();
-      const aviso = hojasSinEncabezado.length ? `\n⚠️ Hojas omitidas (sin encabezado "Codigo"): ${hojasSinEncabezado.join(', ')}` : '';
-      alert(`✅ Sobre Stock cargado correctamente: ${globalSobreStock.length} artículos.${aviso}`);
     }, 'Sobre Stock');
     event.target.value = '';
   }
@@ -494,8 +814,8 @@
   function procesarPrecios(event) {
     const file = event.target.files[0];
     if (!file) return;
-    leerExcel(file, wb => {
-      // Solo se toman las hojas con formato de lista base Iveco (encabezado "Catálogo")
+    cerrarMenu();
+    leerExcel(file, async wb => {
       const campos = {
         codigo: ['catalogo'],
         precio: ['s/iva'],
@@ -528,32 +848,156 @@
       globalPrecios = tempPrecios;
       guardarLS('navicam_precios', globalPrecios);
       actualizarEstadoCarga();
-      toggleMenu();
       render();
-      alert(`✅ Lista de Precios cargada correctamente: ${Object.keys(globalPrecios).length} artículos (hoja: ${hojasUsadas.join(', ')}).`);
+      avisoSubiendo('Subiendo lista de precios a Google…');
+      const n = Object.keys(globalPrecios).length;
+      try {
+        const compacto = {};
+        Object.keys(tempPrecios).forEach(c => { const v = tempPrecios[c]; compacto[c] = [v.precioUsd, v.desc, v.descuento]; });
+        const resp = await enviarOp({ tipo: 'subirDatos', tipoDatos: 'precios', archivo: file.name, contenido: JSON.stringify(compacto) }, 180000);
+        const res = resp.resultado || {};
+        if (res.meta) { metasLocales.precios = res.meta.version; guardarLS('navicam_metas', metasLocales); }
+        alert(`✅ Lista de Precios cargada y compartida: ${n} artículos (hoja: ${hojasUsadas.join(', ')}).`);
+      } catch (e) {
+        alert(`⚠️ Lista de Precios cargada en ESTE dispositivo (${n} artículos), pero no se pudo compartir: ${e.message}`);
+      }
     }, 'Precios');
     event.target.value = '';
   }
 
+  // ===================== Exportación a Excel =====================
+  function valorCelda(v) {
+    const s = String(v === undefined || v === null ? '' : v);
+    return /^\d{1,15}$/.test(s) ? Number(s) : s;
+  }
+
+  function nombreHoja(nombre, usados) {
+    let base = String(nombre).replace(/[\\\/\?\*\[\]:]/g, '-').slice(0, 31) || 'Hoja';
+    let n = base, i = 2;
+    while (usados.has(n.toLowerCase())) { const suf = ' (' + i++ + ')'; n = base.slice(0, 31 - suf.length) + suf; }
+    usados.add(n.toLowerCase());
+    return n;
+  }
+
+  function fechaArchivo() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  async function exportarSobre() {
+    cerrarMenu();
+    await refrescarRegistro();
+    const wb = XLSX.utils.book_new();
+    const usados = new Set();
+    const cajones = globalCajones.length ? globalCajones : [...new Set(globalSobreStock.map(x => x.CAJON))];
+    cajones.forEach(cajon => {
+      const filas = [[null, cajon], ['CANT.', 'CODIGO', 'UBICACIÓN']];
+      globalSobreStock.filter(x => x.CAJON === cajon).forEach(x => filas.push([x.CANTIDAD, valorCelda(x.CODIGO), x.UBICACION]));
+      const ws = XLSX.utils.aoa_to_sheet(filas);
+      ws['!cols'] = [{ wch: 8 }, { wch: 16 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, ws, nombreHoja(cajon, usados));
+    });
+    const reg = [['Fecha', 'Tipo', 'Detalle', 'Dispositivo']];
+    globalRegistro.forEach(r => reg.push([r.fecha, r.tipo, r.detalle, r.dispositivo || '']));
+    const wsr = XLSX.utils.aoa_to_sheet(reg);
+    wsr['!cols'] = [{ wch: 17 }, { wch: 20 }, { wch: 90 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, wsr, nombreHoja('REGISTRO', usados));
+    XLSX.writeFile(wb, 'Sobre_stock_' + fechaArchivo() + '.xlsx');
+  }
+
+  function exportarStock() {
+    cerrarMenu();
+    if (!globalStock.length) { alert('No hay stock cargado.'); return; }
+    const filas = [['Codigo', 'Descripcion', 'Ubicacion', 'Stock']];
+    globalStock.forEach(x => {
+      const st = parseFloat(x.STOCK);
+      filas.push([valorCelda(x.CODIGO), x.DESCRIPCION, ubicacionDe(x), isNaN(st) ? x.STOCK : st]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(filas);
+    ws['!cols'] = [{ wch: 16 }, { wch: 50 }, { wch: 14 }, { wch: 8 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock');
+    XLSX.writeFile(wb, 'Stock_deposito_' + fechaArchivo() + '.xlsx');
+  }
+
+  async function exportarHistorial() {
+    cerrarMenu();
+    await refrescarRegistro();
+    const wb = XLSX.utils.book_new();
+    const h = [['Fecha', 'Tipo', 'Detalle', 'Dispositivo']];
+    historialCombinado().forEach(x => h.push([x.fecha, x.tipo, x.detalle, x.dispositivo || '']));
+    const wsh = XLSX.utils.aoa_to_sheet(h);
+    wsh['!cols'] = [{ wch: 17 }, { wch: 20 }, { wch: 90 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, wsh, 'Historial');
+    const n = [['Código', 'Descripción', 'Anotación', 'Fecha']];
+    Object.keys(globalNotas).forEach(cod => {
+      const o = globalNotas[cod];
+      if (!o || !o.texto) return;
+      const st = globalStock.find(x => x.CODIGO === cod);
+      n.push([valorCelda(cod), (st && st.DESCRIPCION) || (globalPrecios[cod] || {}).desc || '', o.texto, o.fecha]);
+    });
+    const wsn = XLSX.utils.aoa_to_sheet(n);
+    wsn['!cols'] = [{ wch: 16 }, { wch: 40 }, { wch: 60 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, wsn, 'Anotaciones');
+    XLSX.writeFile(wb, 'Historial_y_anotaciones_' + fechaArchivo() + '.xlsx');
+  }
+
+  // ===================== Pantalla =====================
+  function historialCombinado() {
+    const compartido = globalRegistro.map(r => ({ ts: r.ts || 0, fecha: r.fecha, tipo: r.tipo, detalle: r.detalle, dispositivo: r.dispositivo, resultado: r.resultado }));
+    const local = globalHistorial.map(h => ({ ts: h.ts || 0, fecha: h.fecha, tipo: h.tipo, detalle: (h.codigo ? h.codigo + ': ' : '') + h.detalle, dispositivo: 'Este dispositivo (antes)' }));
+    return compartido.concat(local).sort((a, b) => b.ts - a.ts);
+  }
+
+  // Evita redibujar mientras se está escribiendo en un campo
+  let renderPendiente = false;
+  function renderSeguro() {
+    const a = document.activeElement;
+    const enLista = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT') &&
+      (document.getElementById('contentList').contains(a) || document.getElementById('panelSobre').contains(a));
+    if (enLista) { renderPendiente = true; return; }
+    render();
+  }
+  document.addEventListener('focusout', () => { if (renderPendiente) { renderPendiente = false; setTimeout(renderSeguro, 300); } });
+
+  let itemsVista = [];
+
   function render() {
+    // El panel se redibuja solo si cambia la vista o no hay un formulario abierto (para no borrar lo tipeado)
+    const panel = document.getElementById('panelSobre');
+    const panelVisible = panel.style.display !== 'none';
+    if ((vistaActual === 'sobreStock') !== panelVisible || !formSobre) pintarPanelSobre();
     const q = document.getElementById('searchInput').value.toLowerCase().trim();
     const listContainer = document.getElementById('contentList');
 
     if (vistaActual === 'historial') {
-      const filtradosH = globalHistorial.filter(h => 
-        h.codigo.toLowerCase().includes(q) || h.detalle.toLowerCase().includes(q) || h.tipo.toLowerCase().includes(q)
+      const filtradosH = historialCombinado().filter(h =>
+        (h.detalle || '').toLowerCase().includes(q) || (h.tipo || '').toLowerCase().includes(q) || (h.fecha || '').toLowerCase().includes(q)
       );
       if (filtradosH.length === 0) {
         listContainer.innerHTML = '<div class="loader">No hay cambios registrados en el historial.</div>';
         return;
       }
-      listContainer.innerHTML = filtradosH.map(h => `
+      listContainer.innerHTML = filtradosH.slice(0, 200).map(h => {
+        let extra = '';
+        const res = h.resultado || {};
+        const cambios = (res.listaRepetidos || []).filter(x => x.cambio);
+        if (cambios.length) {
+          extra = '<div class="lista-mini">Repetidos con diferencias (se tomó el Excel):<br>' +
+            cambios.slice(0, 30).map(x => `${esc(x.codigo)} (${esc(x.cajon)}): cant ${x.cantAnterior}→${x.cantNueva}` + (x.ubiAnterior !== x.ubiNueva ? `, ubic ${esc(x.ubiAnterior)}→${esc(x.ubiNueva)}` : '')).join('<br>') +
+            (cambios.length > 30 ? `<br>… y ${cambios.length - 30} más` : '') + '</div>';
+        }
+        if ((res.conflictosUbicacion || []).length) {
+          extra += '<div class="lista-mini">Ubicaciones de la app reemplazadas por el Excel:<br>' +
+            res.conflictosUbicacion.slice(0, 30).map(x => `${esc(x.codigo)}: ${esc(x.app)} → ${esc(x.excel)}`).join('<br>') + '</div>';
+        }
+        return `
         <div class="card">
-          <div class="card-header"><span class="code">${h.codigo}</span><span class="badge">${h.tipo}</span></div>
-          <div class="description" style="color:#fbbf24; font-weight:bold;">${h.detalle}</div>
-          <div class="time-stamp">Modificado el ${h.fecha}</div>
-        </div>
-      `).join('');
+          <div class="card-header"><span class="badge">${esc(h.tipo)}</span><span class="time-stamp">${esc(h.fecha)}${h.dispositivo ? ' · ' + esc(h.dispositivo) : ''}</span></div>
+          <div class="description" style="color:#fbbf24; font-weight:bold; margin-bottom:0;">${esc(h.detalle)}</div>
+          ${extra}
+        </div>`;
+      }).join('');
       return;
     }
 
@@ -575,16 +1019,16 @@
         return `
           <div class="card">
             <div class="card-header">
-              <span class="code">${cod}</span>
-              <button class="btn-delete-note" onclick="borrarNota('${cod}')">✓ Borrar</button>
+              <span class="code">${esc(cod)}</span>
+              <button class="btn-delete-note" onclick="borrarNota('${esc(cod)}')">✓ Borrar</button>
             </div>
-            ${desc ? `<div class="description">${desc}</div>` : ''}
+            ${desc ? `<div class="description">${esc(desc)}</div>` : ''}
             <div class="notes-section" style="border:none; padding:0;">
               <div class="notes-header">
                 <span class="info-label">Anotación:</span>
-                <span class="time-stamp" id="fecha-${cod}">${objNota.fecha}</span>
+                <span class="time-stamp" id="fecha-${esc(cod)}">${esc(objNota.fecha)}</span>
               </div>
-              <textarea oninput="guardarNota('${cod}', this.value)">${objNota.texto}</textarea>
+              <textarea oninput="guardarNota('${esc(cod)}', this.value)">${esc(objNota.texto)}</textarea>
             </div>
           </div>
         `;
@@ -592,18 +1036,18 @@
       return;
     }
 
+    if (vistaActual === 'sobreStock') { renderSobre(q, listContainer); return; }
+
     if (q === '') {
       listContainer.innerHTML = '<div class="loader">🔍 Escribí un código, descripción o posición para buscar...</div>';
       return;
     }
 
-    const items = (vistaActual === 'deposito') ? globalStock : globalSobreStock;
-    const filtrados = items.filter(item => {
+    const filtrados = globalStock.filter(item => {
       const cod = String(item.CODIGO || '').toLowerCase();
       const desc = String(item.DESCRIPCION || '').toLowerCase();
-      const ubi = String(item.UBICACION || '').toLowerCase();
-      const cajon = String(item.CAJON || '').toLowerCase();
-      return cod.includes(q) || desc.includes(q) || ubi.includes(q) || cajon.includes(q);
+      const ubi = String(ubicacionDe(item)).toLowerCase();
+      return cod.includes(q) || desc.includes(q) || ubi.includes(q);
     });
 
     if (filtrados.length === 0) {
@@ -612,80 +1056,125 @@
     }
 
     const limitados = filtrados.slice(0, 30);
+    itemsVista = limitados;
     const aviso = filtrados.length > 30 ? `<div style="text-align:center; font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">Mostrando 30 de ${filtrados.length} resultados.</div>` : '';
 
-    listContainer.innerHTML = aviso + limitados.map(item => {
+    listContainer.innerHTML = aviso + limitados.map((item, i) => {
       const cod = item.CODIGO || 'SIN CÓDIGO';
       const objNota = globalNotas[cod] || { texto: '', fecha: '' };
       const infoPrecio = globalPrecios[cod] || {};
-      const dtoTag = infoPrecio.descuento ? `<span class="disc-tag">D: ${infoPrecio.descuento}</span>` : '';
+      const dtoTag = infoPrecio.descuento ? `<span class="disc-tag">D: ${esc(infoPrecio.descuento)}</span>` : '';
+      const precioUsd = infoPrecio.precioUsd || 0;
+      const precioArs = precioUsd > 0 ? (precioUsd * cotizacionDolar).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) : 'Consultar';
+      const desc = item.DESCRIPCION || infoPrecio.desc || '-';
+      const ubicacion = ubicacionDe(item);
+      const stock = item.STOCK !== undefined ? item.STOCK : '-';
+      const enSobre = globalSobreStock.filter(x => x.CODIGO === cod);
+      const sobreTxt = enSobre.length ? `<div class="lista-mini">📑 En sobre stock: ${enSobre.map(x => esc(x.CAJON) + ' (' + x.CANTIDAD + ')').join(', ')}</div>` : '';
 
-      if (vistaActual === 'deposito') {
-        const precioUsd = infoPrecio.precioUsd || 0;
-        const precioArs = precioUsd > 0 ? (precioUsd * cotizacionDolar).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) : 'Consultar';
-        const desc = item.DESCRIPCION || infoPrecio.desc || '-';
-        const ubicacion = item.UBICACION || '-';
-        const stock = item.STOCK !== undefined ? item.STOCK : '-';
-
-        return `
-          <div class="card">
-            <div class="card-header">
-              <div class="code-container"><span class="code">${cod}</span>${dtoTag}</div>
-              <span class="badge">Ubicación: ${ubicacion}</span>
-            </div>
-            <div class="description">${desc}</div>
-            <div class="info-grid">
-              <div class="info-item"><span class="info-label">Stock Depósito</span><strong>${stock}</strong></div>
-              <div class="info-item"><span class="info-label">Precio ARS (USD ${precioUsd})</span><strong>${precioArs}</strong></div>
-            </div>
-            <div class="edit-row">
-              <span class="info-label">Cambiar Posición:</span>
-              <input type="text" id="input-ubi-${cod}" class="edit-input" value="${ubicacion}">
-              <button class="btn-save" onclick="cambiarUbicacion('${cod}', document.getElementById('input-ubi-${cod}').value)">Guardar</button>
-            </div>
-            <div class="notes-section">
-              <div class="notes-header">
-                <span class="info-label">Anotación Personal:</span>
-                ${objNota.fecha ? `<span class="time-stamp" id="fecha-${cod}">${objNota.fecha}</span>` : ''}
-              </div>
-              <textarea placeholder="Agregar nota..." oninput="guardarNota('${cod}', this.value)">${objNota.texto}</textarea>
-            </div>
+      return `
+        <div class="card">
+          <div class="card-header">
+            <div class="code-container"><span class="code">${esc(cod)}</span>${dtoTag}</div>
+            <span class="badge">Ubicación: ${esc(ubicacion)}</span>
           </div>
-        `;
-      } else {
-        const cant = item.CANTIDAD !== undefined ? item.CANTIDAD : 0;
-        const cajon = item.CAJON || 'SOBRE STOCK';
-        const ubi = item.UBICACION || '-';
-
-        return `
-          <div class="card">
-            <div class="card-header">
-              <div class="code-container"><span class="code">${cod}</span>${dtoTag}</div>
-              <span class="badge">${cajon}</span>
-            </div>
-            <div class="info-grid">
-              <div class="info-item"><span class="info-label">Cantidad Actual</span><strong>${cant} unid.</strong></div>
-              <div class="info-item"><span class="info-label">Ubicación Estantería</span><strong>${ubi}</strong></div>
-            </div>
-            <div class="edit-row">
-              <span class="info-label">Nueva Cantidad:</span>
-              <input type="number" id="input-cant-${cod}-${cajon}" class="edit-input" style="width: 80px;" value="${cant}">
-              <button class="btn-save" onclick="cambiarCantSobreStock('${cod}', '${cajon}', document.getElementById('input-cant-${cod}-${cajon}').value)">Guardar</button>
-            </div>
-            <div class="notes-section">
-              <div class="notes-header">
-                <span class="info-label">Anotación / Movimiento:</span>
-                ${objNota.fecha ? `<span class="time-stamp" id="fecha-${cod}">${objNota.fecha}</span>` : ''}
-              </div>
-              <textarea placeholder="Ej: Pasa a cajón sobre stock 5..." oninput="guardarNota('${cod}', this.value)">${objNota.texto}</textarea>
-            </div>
+          <div class="description">${esc(desc)}</div>
+          <div class="info-grid">
+            <div class="info-item"><span class="info-label">Stock Depósito</span><strong>${esc(stock)}</strong></div>
+            <div class="info-item"><span class="info-label">Precio ARS (USD ${precioUsd})</span><strong>${precioArs}</strong></div>
           </div>
-        `;
-      }
+          ${sobreTxt}
+          <div class="edit-row">
+            <span class="info-label">Cambiar Posición:</span>
+            <input type="text" id="ubi-${i}" class="edit-input" value="${esc(ubicacion)}">
+            <button class="btn-save" onclick="cambiarUbicacion(itemsVista[${i}].CODIGO, document.getElementById('ubi-${i}').value, this)">Guardar</button>
+          </div>
+          <div class="notes-section">
+            <div class="notes-header">
+              <span class="info-label">Anotación Personal:</span>
+              ${objNota.fecha ? `<span class="time-stamp" id="fecha-${esc(cod)}">${esc(objNota.fecha)}</span>` : ''}
+            </div>
+            <textarea placeholder="Agregar nota..." oninput="guardarNota('${esc(cod)}', this.value)">${esc(objNota.texto)}</textarea>
+          </div>
+        </div>
+      `;
     }).join('');
   }
 
+  function renderSobre(q, listContainer) {
+    // Sin búsqueda ni cajón elegido: lista de cajones
+    if (!q && !cajonSel) {
+      const cajones = globalCajones.length ? globalCajones : [...new Set(globalSobreStock.map(x => x.CAJON))];
+      if (cajones.length === 0) {
+        listContainer.innerHTML = '<div class="loader">No hay cajones todavía. Creá uno con "➕ Nuevo cajón" o importá el Excel de Sobre Stock.</div>';
+        return;
+      }
+      listContainer.innerHTML = cajones.map(c => {
+        const items = globalSobreStock.filter(x => x.CAJON === c);
+        const unidades = items.reduce((a, x) => a + (x.CANTIDAD || 0), 0);
+        return `
+          <div class="card card-click" onclick="seleccionarCajon(this.dataset.cajon)" data-cajon="${esc(c)}">
+            <div class="card-header" style="margin-bottom:0;">
+              <span class="code" style="font-size:1rem;">${esc(c)}</span>
+              <span class="badge">${items.length} art. · ${unidades} unid.</span>
+            </div>
+            ${items.length === 0 ? `<div class="edit-row"><span class="info-label">Cajón vacío</span><button class="btn-del" onclick="event.stopPropagation(); eliminarCajon(this.closest('.card').dataset.cajon)">🗑 Eliminar cajón</button></div>` : ''}
+          </div>`;
+      }).join('');
+      return;
+    }
+
+    let items = globalSobreStock;
+    if (cajonSel) items = items.filter(x => x.CAJON === cajonSel);
+    if (q) items = items.filter(item => {
+      return String(item.CODIGO || '').toLowerCase().includes(q) || String(item.UBICACION || '').toLowerCase().includes(q) ||
+        String(item.CAJON || '').toLowerCase().includes(q);
+    });
+
+    const volver = `<div style="margin-bottom:12px;"><button class="btn-sec" onclick="seleccionarCajon('')">← Todos los cajones</button>${cajonSel ? ` <span class="badge" style="margin-left:6px;">${esc(cajonSel)}</span>` : ''}</div>`;
+
+    if (items.length === 0) {
+      listContainer.innerHTML = volver + `<div class="loader">${cajonSel && !q ? 'Este cajón está vacío. Agregá artículos con "➕ Agregar artículo".' : 'No se encontraron resultados.'}</div>`;
+      return;
+    }
+
+    const limitados = items.slice(0, 60);
+    itemsVista = limitados;
+    const aviso = items.length > 60 ? `<div style="text-align:center; font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">Mostrando 60 de ${items.length}.</div>` : '';
+
+    listContainer.innerHTML = volver + aviso + limitados.map((item, i) => {
+      const cod = item.CODIGO;
+      const infoPrecio = globalPrecios[cod] || {};
+      const st = globalStock.find(x => x.CODIGO === cod);
+      const desc = (st && st.DESCRIPCION) || infoPrecio.desc || '';
+      const dtoTag = infoPrecio.descuento ? `<span class="disc-tag">D: ${esc(infoPrecio.descuento)}</span>` : '';
+      return `
+        <div class="card">
+          <div class="card-header">
+            <div class="code-container"><span class="code">${esc(cod)}</span>${dtoTag}</div>
+            <span class="badge">${esc(item.CAJON)}</span>
+          </div>
+          ${desc ? `<div class="description">${esc(desc)}</div>` : ''}
+          <div class="info-grid">
+            <div class="info-item"><span class="info-label">Cantidad Actual</span><strong>${item.CANTIDAD} unid.</strong></div>
+            <div class="info-item"><span class="info-label">Ubicación Estantería</span><strong>${esc(item.UBICACION)}</strong></div>
+          </div>
+          <div class="edit-row">
+            <span class="info-label">Nueva Cantidad:</span>
+            <input type="number" id="cant-${i}" class="edit-input" style="width: 80px;" value="${item.CANTIDAD}">
+            <button class="btn-save" onclick="cambiarCantSobreStock(${i}, this)">Guardar</button>
+            <button class="btn-del" onclick="eliminarArticulo(${i}, this)">🗑</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  pintarEstadoSync();
   render();
+  sincronizar();
+  setInterval(sincronizar, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(); });
 </script>
 
 </body>
