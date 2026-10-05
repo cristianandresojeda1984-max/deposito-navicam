@@ -148,15 +148,37 @@
 
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); });
+    navigator.serviceWorker.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); }).catch(() => {});
+  }
+
+  // Lectura segura: si un dato guardado está dañado, no rompe toda la app
+  function leerLS(clave, porDefecto) {
+    try {
+      const v = localStorage.getItem(clave);
+      return v ? JSON.parse(v) : porDefecto;
+    } catch (e) {
+      console.warn('Dato dañado en ' + clave + ', se reinicia.', e);
+      return porDefecto;
+    }
+  }
+
+  // Guardado seguro: avisa si el navegador se queda sin espacio
+  function guardarLS(clave, valor) {
+    try {
+      localStorage.setItem(clave, JSON.stringify(valor));
+      return true;
+    } catch (e) {
+      alert('⚠️ No se pudo guardar "' + clave + '" en el navegador (sin espacio). Los datos se ven ahora pero se perderán al recargar.');
+      return false;
+    }
   }
 
   // Almacenamiento global
-  let globalPrecios = JSON.parse(localStorage.getItem('navicam_precios') || '{}');
-  let globalStock = JSON.parse(localStorage.getItem('navicam_stock') || '[]');
-  let globalSobreStock = JSON.parse(localStorage.getItem('navicam_sobre') || '[]');
-  let globalNotas = JSON.parse(localStorage.getItem('navicam_notas_v2') || '{}');
-  let globalHistorial = JSON.parse(localStorage.getItem('navicam_historial') || '[]');
+  let globalPrecios = leerLS('navicam_precios', {});
+  let globalStock = leerLS('navicam_stock', []);
+  let globalSobreStock = leerLS('navicam_sobre', []);
+  let globalNotas = leerLS('navicam_notas_v2', {});
+  let globalHistorial = leerLS('navicam_historial', []);
   
   let vistaActual = 'deposito';
   let cotizacionDolar = parseFloat(localStorage.getItem('navicam_dolar') || '1250');
@@ -216,7 +238,7 @@
     if (anterior === nuevaUbi) return;
 
     item.UBICACION = nuevaUbi;
-    localStorage.setItem('navicam_stock', JSON.stringify(globalStock));
+    guardarLS('navicam_stock', globalStock);
 
     globalHistorial.unshift({
       codigo: codigo,
@@ -224,7 +246,7 @@
       detalle: `Ubicación actual ${nuevaUbi}, ubicación anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
     });
-    localStorage.setItem('navicam_historial', JSON.stringify(globalHistorial));
+    guardarLS('navicam_historial', globalHistorial);
 
     alert(`Ubicación actualizada: ${codigo} ➔ ${nuevaUbi}`);
     render();
@@ -239,7 +261,7 @@
     if (anterior === nuevaCant) return;
 
     item.CANTIDAD = nuevaCant;
-    localStorage.setItem('navicam_sobre', JSON.stringify(globalSobreStock));
+    guardarLS('navicam_sobre', globalSobreStock);
 
     globalHistorial.unshift({
       codigo: codigo,
@@ -247,7 +269,7 @@
       detalle: `Cajón ${cajon}: Cantidad actual ${nuevaCant}, cantidad anterior ${anterior}`,
       fecha: obtenerFechaHoraActual()
     });
-    localStorage.setItem('navicam_historial', JSON.stringify(globalHistorial));
+    guardarLS('navicam_historial', globalHistorial);
 
     alert(`Cantidad sobre stock actualizada: ${codigo} ➔ ${nuevaCant} unid.`);
     render();
@@ -259,128 +281,191 @@
     } else {
       globalNotas[codigo] = { texto: texto, fecha: obtenerFechaHoraActual() + ' hs' };
     }
-    localStorage.setItem('navicam_notas_v2', JSON.stringify(globalNotas));
+    guardarLS('navicam_notas_v2', globalNotas);
     const elFecha = document.getElementById(`fecha-${codigo}`);
     if (elFecha && globalNotas[codigo]) elFecha.innerText = globalNotas[codigo].fecha;
   }
 
   function borrarNota(codigo) {
     delete globalNotas[codigo];
-    localStorage.setItem('navicam_notas_v2', JSON.stringify(globalNotas));
+    guardarLS('navicam_notas_v2', globalNotas);
     render();
   }
 
-  // Funciones de procesamiento independientes y blindadas contra errores de ámbito
-  function procesarStock(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+  // ===== Importación de Excel: las columnas se ubican por el nombre del encabezado =====
+  function normalizar(v) {
+    return String(v === undefined || v === null ? '' : v)
+      .normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+  }
+
+  function limpiarCodigo(v) {
+    if (v === undefined || v === null) return '';
+    let s = String(v).trim().toUpperCase();
+    if (/^\d+\.0+$/.test(s)) s = s.split('.')[0];
+    return s;
+  }
+
+  // Busca la fila de encabezado y devuelve {fila, col: {nombre: índice}}
+  // 'campos' = { nombre: ['texto encabezado 1', 'alternativa', ...] }; 'obligatorio' = campo que debe existir
+  function buscarEncabezado(rows, campos, obligatorio) {
+    for (let i = 0; i < Math.min(rows.length, 40); i++) {
+      const r = rows[i] || [];
+      const celdas = Array.from(r, normalizar);
+      const col = {};
+      for (const [nombre, alternativas] of Object.entries(campos)) {
+        const idx = celdas.findIndex(c => alternativas.includes(c));
+        if (idx !== -1) col[nombre] = idx;
+      }
+      if (col[obligatorio] !== undefined && Object.keys(col).length >= 2) return { fila: i, col };
+    }
+    return null;
+  }
+
+  function leerExcel(file, alTerminar, etiqueta) {
     const reader = new FileReader();
     reader.onload = function(e) {
       try {
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        let acumulado = [];
-        wb.SheetNames.forEach(sheetName => {
-          const sheet = wb.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          rows.forEach(r => {
-            if (!r || r.length === 0) return;
-            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
-            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
-            acumulado.push({
-              CODIGO: cod.toUpperCase(),
-              DESCRIPCION: r[1] !== undefined ? String(r[1]).trim() : '',
-              STOCK: r[3] !== undefined ? String(r[3]).trim() : (r[2] !== undefined ? String(r[2]).trim() : '0'),
-              UBICACION: r[r.length - 1] !== undefined ? String(r[r.length - 1]).trim() : '-'
-            });
-          });
-        });
-        globalStock = acumulado;
-        localStorage.setItem('navicam_stock', JSON.stringify(globalStock));
-        actualizarEstadoCarga();
-        toggleMenu();
-        render();
-        alert(`✅ Stock de Depósito cargado correctamente: ${globalStock.length} artículos.`);
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        alTerminar(wb);
       } catch (err) {
-        alert("❌ Error al procesar Stock: " + err.message);
+        alert('❌ Error al procesar ' + etiqueta + ': ' + err.message);
       }
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  function hojaComoFilas(wb, nombre) {
+    return XLSX.utils.sheet_to_json(wb.Sheets[nombre], { header: 1, defval: '' });
+  }
+
+  function procesarStock(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    leerExcel(file, wb => {
+      const campos = {
+        codigo: ['codigo', 'articulo', 'cod'],
+        descripcion: ['descripcion', 'denominacion'],
+        ubicacion: ['ubicacion', 'posicion'],
+        stock: ['stock', 'cantidad', 'cant.', 'cant']
+      };
+      let acumulado = [];
+      let hojasSinEncabezado = [];
+      wb.SheetNames.forEach(sheetName => {
+        const rows = hojaComoFilas(wb, sheetName);
+        const enc = buscarEncabezado(rows, campos, 'codigo');
+        if (!enc) { hojasSinEncabezado.push(sheetName); return; }
+        const c = enc.col;
+        for (let i = enc.fila + 1; i < rows.length; i++) {
+          const r = rows[i];
+          const cod = limpiarCodigo(r[c.codigo]);
+          if (!cod || cod.length < 2) continue;
+          acumulado.push({
+            CODIGO: cod,
+            DESCRIPCION: c.descripcion !== undefined ? String(r[c.descripcion]).trim() : '',
+            STOCK: c.stock !== undefined ? String(r[c.stock]).trim() : '-',
+            UBICACION: c.ubicacion !== undefined ? (String(r[c.ubicacion]).trim() || '-') : '-'
+          });
+        }
+      });
+      if (acumulado.length === 0) {
+        alert('❌ No se encontró una fila de encabezado con "Codigo" en el archivo de Stock.');
+        return;
+      }
+      globalStock = acumulado;
+      guardarLS('navicam_stock', globalStock);
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+      alert(`✅ Stock de Depósito cargado correctamente: ${globalStock.length} artículos.`);
+    }, 'Stock');
     event.target.value = '';
   }
 
   function procesarSobreStock(event) {
     const file = event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        let acumulado = [];
-        wb.SheetNames.forEach(sheetName => {
-          const sheet = wb.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          rows.forEach(r => {
-            if (!r || r.length === 0) return;
-            const cod = r[0] !== undefined ? String(r[0]).trim() : '';
-            if (!cod || cod.toUpperCase() === 'CODIGO' || cod.toUpperCase() === 'ARTICULO' || cod.length < 2) return;
-            acumulado.push({
-              CODIGO: cod.toUpperCase(),
-              CANTIDAD: r[1] !== undefined ? parseInt(r[1]) || 0 : 0,
-              UBICACION: r[2] !== undefined ? String(r[2]).trim() : '-',
-              CAJON: sheetName
-            });
+    leerExcel(file, wb => {
+      const campos = {
+        codigo: ['codigo', 'articulo', 'cod'],
+        cantidad: ['cant.', 'cant', 'cantidad', 'stock'],
+        ubicacion: ['ubicacion', 'posicion']
+      };
+      let acumulado = [];
+      let hojasSinEncabezado = [];
+      wb.SheetNames.forEach(sheetName => {
+        const rows = hojaComoFilas(wb, sheetName);
+        const enc = buscarEncabezado(rows, campos, 'codigo');
+        if (!enc) { hojasSinEncabezado.push(sheetName); return; }
+        const c = enc.col;
+        const cajon = sheetName.trim().toUpperCase();
+        for (let i = enc.fila + 1; i < rows.length; i++) {
+          const r = rows[i];
+          const cod = limpiarCodigo(r[c.codigo]);
+          if (!cod || cod.length < 2) continue;
+          acumulado.push({
+            CODIGO: cod,
+            CANTIDAD: c.cantidad !== undefined ? (parseInt(r[c.cantidad]) || 0) : 0,
+            UBICACION: c.ubicacion !== undefined ? (String(r[c.ubicacion]).trim() || '-') : '-',
+            CAJON: cajon
           });
-        });
-        globalSobreStock = acumulado;
-        localStorage.setItem('navicam_sobre', JSON.stringify(globalSobreStock));
-        actualizarEstadoCarga();
-        toggleMenu();
-        render();
-        alert(`✅ Sobre Stock cargado correctamente: ${globalSobreStock.length} artículos.`);
-      } catch (err) {
-        alert("❌ Error al procesar Sobre Stock: " + err.message);
+        }
+      });
+      if (acumulado.length === 0) {
+        alert('❌ No se encontró una fila de encabezado con "Codigo" en ninguna hoja de Sobre Stock.');
+        return;
       }
-    };
-    reader.readAsArrayBuffer(file);
+      globalSobreStock = acumulado;
+      guardarLS('navicam_sobre', globalSobreStock);
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+      const aviso = hojasSinEncabezado.length ? `\n⚠️ Hojas omitidas (sin encabezado "Codigo"): ${hojasSinEncabezado.join(', ')}` : '';
+      alert(`✅ Sobre Stock cargado correctamente: ${globalSobreStock.length} artículos.${aviso}`);
+    }, 'Sobre Stock');
     event.target.value = '';
   }
 
   function procesarPrecios(event) {
     const file = event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        let tempPrecios = {};
-        wb.SheetNames.forEach(sheetName => {
-          const sheet = wb.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          rows.forEach(r => {
-            if (!r || !r[0]) return;
-            const cod = String(r[0]).trim().toUpperCase();
-            if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 2) return;
-            tempPrecios[cod] = {
-              precioUsd: parseFloat(r[2]) || 0,
-              desc: r[5] !== undefined ? String(r[5]).trim() : '',
-              descuento: r[4] !== undefined ? String(r[4]).trim() : '-'
-            };
-          });
-        });
-        globalPrecios = tempPrecios;
-        localStorage.setItem('navicam_precios', JSON.stringify(globalPrecios));
-        actualizarEstadoCarga();
-        toggleMenu();
-        render();
-        alert(`✅ Lista de Precios cargada correctamente: ${Object.keys(globalPrecios).length} artículos.`);
-      } catch (err) {
-        alert("❌ Error al procesar Precios: " + err.message);
+    leerExcel(file, wb => {
+      // Solo se toman las hojas con formato de lista base Iveco (encabezado "Catálogo")
+      const campos = {
+        codigo: ['catalogo'],
+        precio: ['s/iva'],
+        descuento: ['d'],
+        desc: ['denominacion']
+      };
+      let tempPrecios = {};
+      let hojasUsadas = [];
+      wb.SheetNames.forEach(sheetName => {
+        const rows = hojaComoFilas(wb, sheetName);
+        const enc = buscarEncabezado(rows, campos, 'codigo');
+        if (!enc || enc.col.precio === undefined) return;
+        hojasUsadas.push(sheetName);
+        const c = enc.col;
+        for (let i = enc.fila + 1; i < rows.length; i++) {
+          const r = rows[i];
+          const cod = limpiarCodigo(r[c.codigo]);
+          if (!cod || cod.length < 2) continue;
+          tempPrecios[cod] = {
+            precioUsd: parseFloat(r[c.precio]) || 0,
+            desc: c.desc !== undefined ? String(r[c.desc]).trim() : '',
+            descuento: c.descuento !== undefined ? (String(r[c.descuento]).trim() || '-') : '-'
+          };
+        }
+      });
+      if (hojasUsadas.length === 0) {
+        alert('❌ No se encontró la hoja de precios (encabezados "Catálogo" y "s/IVA").');
+        return;
       }
-    };
-    reader.readAsArrayBuffer(file);
+      globalPrecios = tempPrecios;
+      guardarLS('navicam_precios', globalPrecios);
+      actualizarEstadoCarga();
+      toggleMenu();
+      render();
+      alert(`✅ Lista de Precios cargada correctamente: ${Object.keys(globalPrecios).length} artículos (hoja: ${hojasUsadas.join(', ')}).`);
+    }, 'Precios');
     event.target.value = '';
   }
 
