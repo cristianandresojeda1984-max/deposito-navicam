@@ -296,7 +296,7 @@
     render();
   }
 
-  function parseSheetRows(rows) {
+  function parseSheetRows(rows, nombreHoja) {
     if (!rows || rows.length === 0) return [];
 
     let headerRowIndex = -1;
@@ -330,6 +330,9 @@
       headers.forEach((h, i) => {
         obj[h] = row[i] !== undefined ? String(row[i]).trim() : '';
       });
+      if (!obj.CAJON && nombreHoja) {
+        obj.CAJON = nombreHoja;
+      }
       return obj;
     }).filter(item => item.CODIGO && item.CODIGO !== '');
   }
@@ -342,12 +345,18 @@
     reader.onload = function(e) {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      
+      let acumulado = [];
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const parsed = parseSheetRows(rows, sheetName);
+        acumulado = acumulado.concat(parsed);
+      });
 
-      stockDepo = parseSheetRows(rows);
+      stockDepo = acumulado;
       localStorage.setItem('navicam_stock', JSON.stringify(stockDepo));
-      alert(`Stock de Depósito cargado correctamente: ${stockDepo.length} artículos.`);
+      alert(`Stock de Depósito cargado correctamente (${workbook.SheetNames.length} hojas): ${stockDepo.length} artículos en total.`);
 
       actualizarEstadoCarga();
       toggleMenu();
@@ -364,12 +373,18 @@
     reader.onload = function(e) {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      
+      let acumulado = [];
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const parsed = parseSheetRows(rows, sheetName);
+        acumulado = acumulado.concat(parsed);
+      });
 
-      sobreStockData = parseSheetRows(rows);
+      sobreStockData = acumulado;
       localStorage.setItem('navicam_sobre', JSON.stringify(sobreStockData));
-      alert(`Sobre Stock cargado correctamente: ${sobreStockData.length} artículos.`);
+      alert(`Sobre Stock cargado correctamente (${workbook.SheetNames.length} hojas): ${sobreStockData.length} artículos en total.`);
 
       actualizarEstadoCarga();
       toggleMenu();
@@ -386,23 +401,27 @@
     reader.onload = function(e) {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
-
-      const sheet = workbook.Sheets['LISTA BASE'] || workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       preciosMap = {};
-      
-      for (let i = 4; i < rows.length; i++) {
-        const r = rows[i];
-        if (r && r[0]) {
-          const cod = String(r[0]).trim().toUpperCase();
-          const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
-          const precio = parseFloat(r[2]) || 0;
-          const desc = r[5] ? String(r[5]).trim() : '';
-          preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
+
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i];
+          if (r && r[0]) {
+            const cod = String(r[0]).trim().toUpperCase();
+            if (cod === 'CODIGO' || cod === 'ARTICULO' || cod.length < 3) continue;
+            const dto = r[4] !== undefined ? String(r[4]).trim() : '-';
+            const precio = parseFloat(r[2]) || 0;
+            const desc = r[5] ? String(r[5]).trim() : '';
+            preciosMap[cod] = { precioUsd: precio, desc: desc, descuento: dto };
+          }
         }
-      }
+      });
+
       localStorage.setItem('navicam_precios', JSON.stringify(preciosMap));
-      alert(`Lista de Precios cargada correctamente: ${Object.keys(preciosMap).length} artículos.`);
+      alert(`Lista de Precios cargada correctamente (${workbook.SheetNames.length} hojas): ${Object.keys(preciosMap).length} artículos en total.`);
 
       actualizarEstadoCarga();
       toggleMenu();
