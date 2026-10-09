@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Navicam · Repuestos Rosario</title>
+<meta name="theme-color" content="#0b1220">
+<style>
+/*CSS*/
+</style>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="lib/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+<div id="carga">Cargando datos…</div>
+<div id="topMovil">
+  <button class="btn" onclick="menuMovil()">☰</button>
+  <b>Navicam</b>
+  <span class="fila" style="gap:8px;flex-wrap:nowrap"><span id="syncMovil" title="Sincronización" style="width:9px;height:9px;border-radius:50%;background:var(--amber)"></span><span class="chip" id="dolarMovil" onclick="editarDolar()">USD —</span></span>
+</div>
+<div id="app">
+  <aside id="side">
+    <div class="marca"><div class="logo">N</div><div><b>Navicam</b><span>Repuestos Rosario</span></div></div>
+    <button class="nav" data-v="inicio" onclick="ir('inicio')"><span class="ic">⌂</span>Inicio</button>
+    <button class="nav" data-v="deposito" onclick="ir('deposito')"><span class="ic">🔍</span>Depósito</button>
+    <button class="nav" data-v="sobre" onclick="ir('sobre')"><span class="ic">▤</span>Sobre stock</button>
+    <button class="nav" data-v="cotizador" onclick="ir('cotizador')"><span class="ic">＄</span>Cotizador</button>
+    <button class="nav" data-v="presupuestos" onclick="ir('presupuestos')"><span class="ic">☰</span>Presupuestos</button>
+    <button class="nav" data-v="metricas" onclick="ir('metricas')"><span class="ic">▥</span>Métricas</button>
+    <button class="nav" data-v="clientes" onclick="ir('clientes')"><span class="ic">☺</span>Clientes</button>
+    <button class="nav" data-v="agenda" onclick="ir('agenda')"><span class="ic">✿</span>Agenda</button>
+    <button class="nav" data-v="anotaciones" onclick="ir('anotaciones')"><span class="ic">✎</span>Anotaciones</button>
+    <button class="nav" data-v="historial" onclick="ir('historial')"><span class="ic">↺</span>Historial</button>
+    <button class="nav" data-v="datos" onclick="ir('datos')"><span class="ic">⚙</span>Datos y ajustes</button>
+    <div class="side-pie">
+      <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
+      <div class="prueba" id="estadoSync">Conectando…</div>
+      <div class="prueba" style="opacity:.6">Versión /*VERSION*/</div>
+    </div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div id="modal" onclick="if(event.target===this)cerrarModal()"><div class="caja" id="modalCaja"></div></div>
+<div id="toast"></div>
+<div id="printArea"></div>
+<script>
+/*JS*/
+</script>
+</body>
+</html>

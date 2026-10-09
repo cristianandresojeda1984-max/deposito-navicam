@@ -11,18 +11,44 @@ const TAM_PARTE = 3000;
 
 const HOJAS = {
   dolar: 'Dólar', stock: 'Stock', precios: 'Precios', sobre: 'Sobre Stock',
-  cajones: 'Cajones', registro: 'Registro', ultimo: '_ultimo_excel_stock'
+  cajones: 'Cajones', registro: 'Registro', ultimo: '_ultimo_excel_stock',
+  repos: 'Reposicionados', nexpro: 'NEXPRO',
+  clientes: 'Clientes', presupuestos: 'Presupuestos', agenda: 'Agenda', notas: 'Anotaciones',
+  reemplazos: 'Reemplazos', motivos: 'Motivos', ajustes: 'Ajustes'
 };
+// Tablas de "documentos" (una fila por registro, primera columna = ID). Se pueden editar a mano.
+// [campo, encabezado, tipo]  tipo: '' texto · 'n' número · 'j' JSON · 'b' sí/no
+const TABLAS = {
+  clientes: [['id', 'ID'], ['nombre', 'Cliente'], ['categoria', 'Categoría'], ['d5', 'D5'], ['d6', 'D6'], ['d7', 'D7'], ['d8', 'D8'], ['d9', 'D9'],
+    ['cuit', 'CUIT'], ['localidad', 'Localidad'], ['contacto', 'Contacto'], ['cumple', 'Cumpleaños'], ['whatsapp', 'WhatsApp'], ['pago', 'Forma de pago'], ['notas', 'Notas']],
+  presupuestos: [['id', 'ID'], ['num', 'N°', 'n'], ['fecha', 'Fecha'], ['clienteNombre', 'Cliente'], ['estadoTxt', 'Estado'], ['totalSinIva', 'Total + IVA', 'n'],
+    ['vendidoSinIva', 'Vendido + IVA', 'n'], ['hasta', 'Válido hasta'], ['validezDias', 'Días de validez', 'n'], ['dolar', 'Dólar', 'n'], ['motivos', 'Motivos no venta'],
+    ['notas', 'Observaciones'], ['clienteId', 'ID cliente'], ['categoria', 'Categoría'], ['estado', 'Estado interno'], ['cierre', 'Cierre', 'j'],
+    ['escala', 'Escala', 'j'], ['items', 'Ítems', 'j'], ['historial', 'Historial', 'j'], ['creado', 'Creado', 'n']],
+  agenda: [['id', 'ID'], ['fecha', 'Fecha'], ['texto', 'Qué es'], ['clienteNombre', 'Cliente'], ['anual', 'Todos los años', 'b'], ['clienteId', 'ID cliente']],
+  notas: [['id', 'Código'], ['texto', 'Anotación'], ['fecha', 'Fecha'], ['ts', 'TS', 'n']],
+  reemplazos: [['id', 'Código pedido'], ['nuevo', 'Código nuevo']],
+  motivos: [['id', 'Motivo'], ['orden', 'Orden', 'n']],
+  ajustes: [['id', 'Clave'], ['valor', 'Valor']]
+};
+
 const ENC = {
   stock: ['Codigo', 'Descripcion', 'Ubicacion', 'Stock'],
   precios: ['Codigo', 'Precio USD', 'Descuento', 'Descripcion'],
   sobre: ['Cajon', 'Codigo', 'Cantidad', 'Ubicacion'],
   cajones: ['Cajon'],
-  registro: ['Fecha', 'Tipo', 'Detalle', 'Dispositivo', 'ID', 'Resultado', 'TS'],
-  ultimo: ['Codigo', 'Ubicacion']
+  registro: ['Fecha', 'Tipo', 'Detalle', 'Dispositivo', 'ID', 'Resultado', 'TS', 'Nota'],
+  ultimo: ['Codigo', 'Ubicacion'],
+  repos: ['Codigo', 'Mes del cambio'],
+  nexpro: ['Codigo Iveco', 'Codigo NEXPRO', 'Descripcion', 'Precio USD', 'D', 'Aplicacion']
 };
+const ENC_TABLAS = {};
+Object.keys(TABLAS).forEach(t => { ENC[t] = TABLAS[t].map(c => c[1]); });
 // Columnas que se guardan como texto (para no perder ceros ni convertir códigos en números)
-const COLS_TEXTO = { stock: [1, 3], precios: [1, 3], sobre: [1, 2, 4], cajones: [1], ultimo: [1, 2] };
+const COLS_TEXTO = { stock: [1, 3], precios: [1, 3], sobre: [1, 2, 4], cajones: [1], ultimo: [1, 2], repos: [1, 2], nexpro: [1, 2, 3, 5, 6] };
+Object.keys(TABLAS).forEach(t => { COLS_TEXTO[t] = []; TABLAS[t].forEach((c, i) => { if (c[2] !== 'n') COLS_TEXTO[t].push(i + 1); }); });
+// Tablas grandes que se bajan por partes
+const GRANDES = ['stock', 'precios', 'repos', 'nexpro'];
 
 // ---------- utilidades ----------
 function props() { return PropertiesService.getScriptProperties(); }
@@ -96,10 +122,22 @@ function planilla() {
   return _ss;
 }
 
+const _hojas = {};
 function hoja(clave) {
+  if (_hojas[clave]) return _hojas[clave];
   const ss = planilla();
   let h = ss.getSheetByName(HOJAS[clave]);
-  if (h) return h;
+  if (h) {
+    // hojas creadas con una versión anterior: agregar las columnas nuevas
+    const enc = ENC[clave];
+    if (enc && h.getMaxColumns() < enc.length) {
+      const desde = h.getMaxColumns();
+      h.insertColumnsAfter(desde, enc.length - desde);
+      h.getRange(1, desde + 1, 1, enc.length - desde).setValues([enc.slice(desde)]).setFontWeight('bold');
+    }
+    _hojas[clave] = h;
+    return h;
+  }
   h = ss.insertSheet(HOJAS[clave]);
   if (clave === 'dolar') {
     h.getRange(1, 1, 2, 2).setValues([['Dólar', 1250], ['Actualizado', '']]);
@@ -112,6 +150,7 @@ function hoja(clave) {
     (COLS_TEXTO[clave] || []).forEach(c => h.getRange(1, c, h.getMaxRows(), 1).setNumberFormat('@'));
   }
   if (clave === 'ultimo') h.hideSheet();
+  _hojas[clave] = h;
   return h;
 }
 
@@ -170,6 +209,12 @@ function alEditar(e) {
       guardarGrande('ubic', {});
     } else if (nombre === HOJAS.precios) {
       subirVersion('precios', { archivo: 'edición manual en Drive' });
+    } else {
+      Object.keys(HOJAS).forEach(k => {
+        if (HOJAS[k] !== nombre) return;
+        if (TABLAS[k]) subirVersion('t_' + k, { archivo: 'edición manual en Drive' });
+        else if (k === 'repos' || k === 'nexpro') subirVersion(k, { archivo: 'edición manual en Drive' });
+      });
     }
   } catch (err) {}
 }
@@ -202,7 +247,7 @@ function leerRegistro(max) {
   return leerTabla('registro').slice(0, max || 500).map(r => {
     let resultado = null;
     try { resultado = r[5] ? JSON.parse(r[5]) : null; } catch (e) {}
-    return { fecha: String(r[0]), tipo: String(r[1]), detalle: String(r[2]), dispositivo: String(r[3]), id: String(r[4]), resultado: resultado, ts: Number(r[6]) || 0 };
+    return { fecha: String(r[0]), tipo: String(r[1]), detalle: String(r[2]), dispositivo: String(r[3]), id: String(r[4]), resultado: resultado, ts: Number(r[6]) || 0, nota: String(r[7] || '') };
   });
 }
 
@@ -216,7 +261,7 @@ function buscarEnRegistro(id) {
       const r = h.getRange(i + 2, 1, 1, ENC.registro.length).getValues()[0];
       let resultado = null;
       try { resultado = r[5] ? JSON.parse(r[5]) : null; } catch (e) {}
-      return { fecha: String(r[0]), tipo: String(r[1]), detalle: String(r[2]), dispositivo: String(r[3]), id: id, resultado: resultado, ts: Number(r[6]) || 0 };
+      return { fecha: String(r[0]), tipo: String(r[1]), detalle: String(r[2]), dispositivo: String(r[3]), id: id, resultado: resultado, ts: Number(r[6]) || 0, nota: String(r[7] || '') };
     }
   }
   return null;
@@ -231,7 +276,7 @@ function agregarRegistro(entrada) {
     res = JSON.stringify(r2);
   }
   h.insertRowBefore(2);
-  h.getRange(2, 1, 1, ENC.registro.length).setValues([[entrada.fecha, entrada.tipo, txt(entrada.detalle), entrada.dispositivo, entrada.id, res, entrada.ts]]);
+  h.getRange(2, 1, 1, ENC.registro.length).setValues([[entrada.fecha, entrada.tipo, txt(entrada.detalle), entrada.dispositivo, entrada.id, res, entrada.ts, txt(entrada.nota || '')]]);
   const ultima = h.getLastRow();
   if (ultima > MAX_REGISTRO + 1) h.deleteRows(MAX_REGISTRO + 2, ultima - MAX_REGISTRO - 1);
 }
@@ -249,17 +294,87 @@ function datosPrecios() {
   return p;
 }
 
+// ---------- tablas de documentos ----------
+function filaADoc(t, r) {
+  const d = {};
+  TABLAS[t].forEach((c, i) => {
+    const v = r[i];
+    if (c[2] === 'n') d[c[0]] = v === '' || v === null ? null : Number(v);
+    else if (c[2] === 'j') { try { d[c[0]] = v ? JSON.parse(v) : null; } catch (e) { d[c[0]] = null; } }
+    else if (c[2] === 'b') d[c[0]] = v === true || /^(si|sí|true|1|x)$/i.test(String(v).trim());
+    else d[c[0]] = v instanceof Date ? Utilities.formatDate(v, 'America/Argentina/Buenos_Aires', 'yyyy-MM-dd') : String(v === null || v === undefined ? '' : v).trim();
+  });
+  d.id = String(d.id || '').trim();
+  return d;
+}
+function docAFila(t, d) {
+  return TABLAS[t].map(c => {
+    const v = d[c[0]];
+    if (c[2] === 'n') return v === null || v === undefined || v === '' ? '' : Number(v);
+    if (c[2] === 'j') return v === null || v === undefined ? '' : JSON.stringify(v);
+    if (c[2] === 'b') return v ? 'Sí' : 'No';
+    return txt(v === null || v === undefined ? '' : v);
+  });
+}
+function leerDocs(t) { return leerTabla(t).map(r => filaADoc(t, r)).filter(d => d.id); }
+function buscarFilaDoc(t, id) {
+  const h = hoja(t), ultima = h.getLastRow();
+  if (ultima < 2) return -1;
+  const ids = h.getRange(2, 1, ultima - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) if (String(ids[i][0]).trim() === id) return i + 2;
+  return -1;
+}
+function guardarDocServidor(t, doc) {
+  if (!TABLAS[t]) throw new Error('tabla desconocida: ' + t);
+  doc.id = String(doc.id || '').trim();
+  if (!doc.id) throw new Error('documento sin ID');
+  const h = hoja(t);
+  if (t === 'presupuestos' && !doc.num) {
+    // número correlativo, asignado acá para que no se repita entre dispositivos
+    const ultima = h.getLastRow();
+    const nums = ultima >= 2 ? h.getRange(2, 2, ultima - 1, 1).getValues().map(r => Number(r[0]) || 0) : [];
+    doc.num = Math.max(0, Number(props().getProperty('ultimo_presupuesto') || 0), ...nums) + 1;
+    props().setProperty('ultimo_presupuesto', String(doc.num));
+  }
+  const fila = docAFila(t, doc);
+  let n = buscarFilaDoc(t, doc.id);
+  if (n === -1) {
+    n = Math.max(2, h.getLastRow() + 1);
+    if (h.getMaxRows() < n) h.insertRowsAfter(h.getMaxRows(), n - h.getMaxRows());
+    (COLS_TEXTO[t] || []).forEach(c => h.getRange(n, c).setNumberFormat('@'));
+  }
+  h.getRange(n, 1, 1, fila.length).setValues([fila]);
+  return doc;
+}
+function borrarDocServidor(t, id) {
+  const n = buscarFilaDoc(t, String(id || '').trim());
+  if (n === -1) return false;
+  hoja(t).deleteRow(n);
+  return true;
+}
+function metasTodas() {
+  const m = { stock: leerMeta('stock'), precios: leerMeta('precios'), repos: leerMeta('repos'), nexpro: leerMeta('nexpro') };
+  Object.keys(TABLAS).forEach(t => { m['t_' + t] = leerMeta('t_' + t); });
+  return m;
+}
+function filaGrande(tipo, r) {
+  if (tipo === 'stock') return [cod(r[0]), String(r[1] || '').trim(), String(r[3] === '' ? '-' : r[3]), String(r[2] || '').trim() || '-'];
+  if (tipo === 'precios') return [cod(r[0]), Number(r[1]) || 0, String(r[3] || '').trim(), String(r[2] || '').trim() || '-'];
+  if (tipo === 'repos') return [cod(r[0]), String(r[1] || '').trim()];
+  return [cod(r[0]), cod(r[1]), String(r[2] || '').trim(), Number(r[3]) || 0, String(r[4] || '').trim() || '-', String(r[5] || '').trim()];
+}
+
 // ---------- lecturas (GET) ----------
 function doGet(e) {
   const accion = (e && e.parameter && e.parameter.accion) || 'dolar';
   if (accion === 'sobre' || accion === 'estado') {
     const d = leerDolar();
     return salida({ dolar: d.dolar, fecha: d.fecha, sobre: leerSobre(), ubicaciones: leerUbicaciones(),
-                    metas: { stock: leerMeta('stock'), precios: leerMeta('precios') }, planillaUrl: planilla().getUrl() });
+                    metas: metasTodas(), planillaUrl: planilla().getUrl(), servidor: 2 });
   }
   if (accion === 'pagina') {
     // Descarga en partes chicas: filas [desde, desde+cuantos) de Stock o Precios
-    const tipo = e.parameter.tipo === 'precios' ? 'precios' : 'stock';
+    const tipo = GRANDES.indexOf(e.parameter.tipo) !== -1 ? e.parameter.tipo : 'stock';
     const desde = Math.max(0, parseInt(e.parameter.desde) || 0);
     const cuantos = Math.min(5000, Math.max(1, parseInt(e.parameter.cuantos) || 1000));
     const h = hoja(tipo);
@@ -269,9 +384,7 @@ function doGet(e) {
       const n = Math.min(cuantos, total - desde);
       filas = h.getRange(2 + desde, 1, n, ENC[tipo].length).getValues()
         .filter(r => r.some(c => c !== '' && c !== null))
-        .map(r => tipo === 'stock'
-          ? [cod(r[0]), String(r[1] || '').trim(), String(r[3] === '' ? '-' : r[3]), String(r[2] || '').trim() || '-']
-          : [cod(r[0]), Number(r[1]) || 0, String(r[3] || '').trim(), String(r[2] || '').trim() || '-']);
+        .map(r => filaGrande(tipo, r));
     }
     return salida({ meta: leerMeta(tipo), total: total, desde: desde, filas: filas });
   }
@@ -281,6 +394,11 @@ function doGet(e) {
     return salida({ meta: leerMeta(tipo), datos: datos });
   }
   if (accion === 'registro') return salida({ registro: leerRegistro(500) });
+  if (accion === 'tabla') {
+    const t = e.parameter.t;
+    if (!TABLAS[t]) return salida({ ok: false, error: 'tabla desconocida' });
+    return salida({ meta: leerMeta('t_' + t), docs: leerDocs(t) });
+  }
   if (accion === 'op') {
     const ent = buscarEnRegistro(e.parameter.id);
     return salida({ aplicada: !!ent, entrada: ent, sobre: ent ? leerSobre() : null });
@@ -338,6 +456,43 @@ function aplicarOperacion(op) {
     sobre.items.push({ CODIGO: codigo, CANTIDAD: cantidad, UBICACION: ubicacion, CAJON: cajon }); cambioSobre = true;
     tipo = 'ALTA_ARTICULO'; detalle = codigo + ' agregado a ' + cajon + ': ' + cantidad + ' unid., ubicación ' + ubicacion;
 
+  } else if (op.tipo === 'editarItem') {
+    const cajon = normCajon(op.cajon), codigo = cod(op.codigo);
+    const it = buscar(cajon, codigo);
+    if (!it) return { ok: false, error: 'No existe ' + codigo + ' en ' + cajon };
+    const nueva = parseInt(op.cantidad) || 0, ubic = String(op.ubicacion || '').trim().toUpperCase() || '-';
+    const cambios = [];
+    if (nueva !== it.CANTIDAD) cambios.push('cantidad ' + it.CANTIDAD + ' → ' + nueva);
+    if (ubic !== it.UBICACION) cambios.push('ubicación ' + it.UBICACION + ' → ' + ubic);
+    if (!cambios.length && !op.nota) return { ok: true, sinCambios: true, sobre: sobre };
+    it.CANTIDAD = nueva; it.UBICACION = ubic; cambioSobre = cambios.length > 0;
+    tipo = 'CAMBIO_SOBRE_STOCK'; detalle = codigo + ' en ' + cajon + ': ' + (cambios.join(', ') || 'sin cambios (solo nota)');
+
+  } else if (op.tipo === 'guardarDoc') {
+    const doc = guardarDocServidor(op.tabla, op.doc || {});
+    subirVersion('t_' + op.tabla, {});
+    resultado = { tabla: op.tabla, id: doc.id, num: doc.num || null };
+    tipo = String((op.reg && op.reg.tipo) || ('GUARDAR_' + String(op.tabla).toUpperCase()));
+    detalle = String((op.reg && op.reg.detalle) || doc.id);
+
+  } else if (op.tipo === 'guardarDocs') {
+    const docs = Array.isArray(op.docs) ? op.docs : [];
+    if (!TABLAS[op.tabla]) return { ok: false, error: 'tabla desconocida' };
+    if (op.reemplazarTodo) escribirTabla(op.tabla, docs.filter(d => d && d.id).map(d => docAFila(op.tabla, d)));
+    else docs.forEach(d => guardarDocServidor(op.tabla, d));
+    subirVersion('t_' + op.tabla, {});
+    resultado = { tabla: op.tabla, cantidad: docs.length };
+    tipo = String((op.reg && op.reg.tipo) || ('IMPORTAR_' + String(op.tabla).toUpperCase()));
+    detalle = String((op.reg && op.reg.detalle) || (docs.length + ' registros'));
+
+  } else if (op.tipo === 'borrarDoc') {
+    if (!TABLAS[op.tabla]) return { ok: false, error: 'tabla desconocida' };
+    borrarDocServidor(op.tabla, op.docId);
+    subirVersion('t_' + op.tabla, {});
+    resultado = { tabla: op.tabla, id: op.docId };
+    tipo = String((op.reg && op.reg.tipo) || ('BORRAR_' + String(op.tabla).toUpperCase()));
+    detalle = String((op.reg && op.reg.detalle) || op.docId);
+
   } else if (op.tipo === 'cambiarCant') {
     const cajon = normCajon(op.cajon), codigo = cod(op.codigo);
     const it = buscar(cajon, codigo);
@@ -379,6 +534,17 @@ function aplicarOperacion(op) {
     guardarGrande('ubic', ubic);
     tipo = 'UBICACION'; detalle = codigo + ': ubicación ' + anterior + ' → ' + nueva;
     resultado = { ubicaciones: ubic };
+
+  } else if (op.tipo === 'subirDatos' && (op.tipoDatos === 'repos' || op.tipoDatos === 'nexpro')) {
+    let datos;
+    try { datos = JSON.parse(String(op.contenido || '')); } catch (e) { return { ok: false, error: 'Datos inválidos' }; }
+    if (!Array.isArray(datos) || !datos.length) return { ok: false, error: 'El archivo no tiene datos' };
+    if (op.tipoDatos === 'repos') escribirTabla('repos', datos.map(r => [txt(cod(r[0])), txt(r[1])]));
+    else escribirTabla('nexpro', datos.map(r => [txt(cod(r[0])), txt(cod(r[1])), txt(r[2]), Number(r[3]) || 0, txt(r[4]), txt(r[5])]));
+    const meta = subirVersion(op.tipoDatos, { cantidad: datos.length, archivo: op.archivo || '' });
+    resultado = { meta: meta };
+    tipo = op.tipoDatos === 'repos' ? 'IMPORTACION_REPOSICIONADOS' : 'IMPORTACION_NEXPRO';
+    detalle = 'Excel ' + (op.archivo || '') + ': ' + datos.length + ' filas';
 
   } else if (op.tipo === 'subirDatos') {
     const tipoDatos = op.tipoDatos === 'precios' ? 'precios' : 'stock';
@@ -451,7 +617,7 @@ function aplicarOperacion(op) {
   }
 
   if (cambioSobre) guardarSobre(sobre);
-  const entrada = { id: op.id, ts: Date.now(), fecha: ahoraTexto(), tipo: tipo, detalle: detalle, dispositivo: String(op.dispositivo || '').slice(0, 40) };
+  const entrada = { id: op.id, ts: Date.now(), fecha: ahoraTexto(), tipo: tipo, detalle: detalle, dispositivo: String(op.dispositivo || '').slice(0, 40), nota: String(op.nota || '').slice(0, 500) };
   if (resultado) entrada.resultado = resultado;
   agregarRegistro(entrada);
   return { ok: true, resultado: resultado, entrada: entrada, sobre: sobre || leerSobre() };
