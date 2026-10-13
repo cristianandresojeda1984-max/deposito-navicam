@@ -95,7 +95,7 @@ function tablaBorrador(b, cli) {
       <td style="font-size:12px">${a.stock !== null ? `<span class="${Number(a.stock) >= l.cant ? '' : 'muted'}">${esc(a.stock)} u. · ${esc(a.ubic)}</span>` : '<span class="muted">sin stock en depósito</span>'}${a.sobre ? ` <span class="muted">+${a.sobre} sobre stock</span>` : ''}<br>
         ${a.enLista || marca !== 'IVECO' ? (a.repos ? etiquetasArticulo({ ...a, enLista: true }) : '') : etiquetasArticulo(a)}
         ${bloqueDispo(l, i)}</td>
-      <td><button class="btn chico rojo" onclick="quitarLinea(${i})">✕</button></td></tr>`;
+      <td><button class="btn chico rojo" onclick="quitarLinea(${i})" title="Quitar este artículo del presupuesto">🗑 Quitar</button></td></tr>`;
   }).join('')}</table>`;
 }
 // Datos Iveco del renglón (después de un reemplazo, los del código nuevo)
@@ -186,7 +186,7 @@ function ponerDesc(i, v) {
 function volverEscala(i) { const b = B(); const l = b.items[i]; l.descPct = descCliente(cliente(b.clienteId), l.D).pct; l.manual = false; calcularLinea(l, b.dolar); guardar('borrador'); pintar(); }
 function leerPesos(v) { let t = String(v).trim().replace(/[$\s]/g, ''); if (/,\d{1,2}$/.test(t) || (t.includes(',') && t.includes('.'))) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(',', '.'); return parseFloat(t) || 0; }
 function ponerListaManual(i, v) { const b = B(); b.items[i].listaManual = leerPesos(v); calcularLinea(b.items[i], b.dolar); guardar('borrador'); pintar(); }
-function quitarLinea(i) { const b = B(); b.items.splice(i, 1); guardar('borrador'); pintar(); }
+function quitarLinea(i) { const b = B(); const l = b.items.splice(i, 1)[0]; guardar('borrador'); pintar(); if (l) aviso(`Se quitó ${l.cod} del presupuesto`, 'ok'); }
 function actualizarPreciosBorrador() {
   const b = B(); b.dolar = S.dolar; const cli = cliente(b.clienteId);
   b.items.forEach(l => refrescarLinea(l, cli, b.dolar));

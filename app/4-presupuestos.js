@@ -77,11 +77,13 @@ function bloqueConfirmar(p) {
   const t = totales(p.items.map((l, i) => ({ ...l, cantV: conf.vend[i] })), 'cantV');
   const noVend = p.items.map((l, i) => i).filter(i => conf.vend[i] < p.items[i].cant);
   return `<div style="font-weight:600;margin-bottom:8px">¿Qué se vendió? Marcá los ítems y ajustá la cantidad</div>
+  <div class="muted" style="font-size:12px;margin:-4px 0 8px">Para cambiar cantidades, precios o artículos usá <b>✎ Modificar</b>. Para sacar un artículo del presupuesto, tocá 🗑.</div>
   <table class="t">${p.items.map((l, i) => `<tr>
     <td style="width:28px;vertical-align:top;padding-top:12px"><input type="checkbox" ${conf.vend[i] > 0 ? 'checked' : ''} onchange="marcarItem(${i},this.checked)"></td>
     <td><span class="num" style="color:var(--amber)">${esc(l.cod)}</span> <span class="tag t-gris">${esc(marcaDe(l))}</span> <span class="num muted" style="font-size:12px">${plata(l.unit)} c/u + IVA</span><div style="font-size:12px" class="muted">${esc(l.desc)}${l.reemplazaA ? ' · reemplaza a ' + esc(l.reemplazaA) : ''}</div>
       ${conf.vend[i] < l.cant ? `<select class="in" style="margin-top:6px;max-width:240px;padding:5px 8px" onchange="conf.mot[${i}]=this.value">${opcionesMotivo(conf.mot[i])}</select>` : ''}</td>
-    <td class="der" style="white-space:nowrap;vertical-align:top"><input class="in" type="number" min="0" max="${l.cant}" value="${conf.vend[i]}" style="width:60px;text-align:right" onchange="cantVendida(${i},this.value)"> <span class="muted">de ${l.cant}</span></td></tr>`).join('')}</table>
+    <td class="der" style="white-space:nowrap;vertical-align:top"><input class="in" type="number" min="0" max="${l.cant}" value="${conf.vend[i]}" style="width:60px;text-align:right" onchange="cantVendida(${i},this.value)"> <span class="muted">de ${l.cant}</span></td>
+    <td style="vertical-align:top;width:34px"><button class="btn chico rojo" title="Quitar este artículo del presupuesto" onclick="quitarDelPresu('${p.id}',${i})">🗑</button></td></tr>`).join('')}</table>
   <div class="fila" style="justify-content:space-between;margin-top:12px"><span>Vendido (${vendidos.length} de ${p.items.length} ítems)</span><b class="num" style="font-size:17px">${masIva(t.sub)}</b></div>
   ${noVend.length ? `<div style="margin-top:12px"><div class="muted" style="font-size:12px;margin-bottom:6px">Motivo de lo que no se vendió (tocá uno para ponerlo en todos los que no tienen motivo)</div>
     <div class="fila">${S.motivos.map(m => `<button class="chip" onclick="motivoATodos(this.dataset.m)" data-m="${esc(m)}">${esc(m)}</button>`).join('')}
@@ -97,6 +99,15 @@ function bloqueResultado(p) {
     <td class="der">${l.vendido || 0} de ${l.cant}</td>
     <td>${(l.vendido || 0) >= l.cant ? '<span class="tag t-green">vendido</span>' : `<span class="tag t-red">${(l.vendido || 0) ? 'parcial' : 'no vendido'}${l.motivo ? ' · ' + esc(l.motivo) : ''}</span>`}</td></tr>`).join('')}</table>
   <div class="fila" style="justify-content:space-between;margin-top:10px"><span>Total vendido</span><b class="num" style="font-size:17px">${masIva(t.sub)}</b></div>`;
+}
+async function quitarDelPresu(id, i) {
+  const p = S.presupuestos.find(x => x.id === id); const l = p.items[i];
+  if (p.items.length === 1) { aviso('Es el único artículo: si no sirve, eliminá el presupuesto.', 'err'); return; }
+  if (!confirm(`¿Quitar ${l.cod} ${l.desc} del presupuesto ${numPresu(p)}?`)) return;
+  const q = JSON.parse(JSON.stringify(p)); q.items.splice(i, 1);
+  q.historial.push({ fecha: ahoraTxt(), texto: `Quitado ${l.cod} (${l.cant} u.)` });
+  if (!await docGuardar('presupuestos', presuADoc(q), { tipo: 'Presupuesto', detalle: `${numPresu(q)}: quitado ${l.cod}` })) return;
+  Object.assign(p, q); guardar('presupuestos'); conf = null; repintarDetalle(); aviso(`Se quitó ${l.cod}`, 'ok');
 }
 function repintarDetalle() { const p = S.presupuestos.find(x => x.id === presuSel); if (p) document.getElementById('detPresu').innerHTML = detallePresu(p); }
 function marcarItem(i, on) { const p = S.presupuestos.find(x => x.id === presuSel); conf.vend[i] = on ? p.items[i].cant : 0; repintarDetalle(); }
