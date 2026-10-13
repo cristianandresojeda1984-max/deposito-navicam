@@ -275,28 +275,31 @@ function stockTotal(cod) { const a = infoArticulo(cod); const n = parseFloat(Str
 function dispoDe(l) {
   const d = l.dispo || {};
   const inm = d.manual ? Math.min(l.cant, Math.max(0, Number(d.inmediata) || 0)) : Math.min(l.cant, Math.floor(stockTotal(l.cod)));
-  return { manual: !!d.manual, inmediata: inm, dias: d.dias === undefined || d.dias === null ? '' : d.dias };
+  return { manual: !!d.manual, inmediata: inm, dias: d.dias === undefined || d.dias === null ? '' : d.dias, sinAbast: !!d.sinAbast };
 }
 function textoDispo(l) {
   const d = l.dispo || dispoDe(l); const resto = l.cant - d.inmediata; const dias = d.dias !== '' && d.dias !== undefined ? Number(d.dias) : null;
   const plazo = dias ? dias + (dias === 1 ? ' día' : ' días') : 'a confirmar';
   if (resto <= 0) return 'Inmediata';
+  if (d.sinAbast) return d.inmediata ? `${d.inmediata} inmediata${d.inmediata > 1 ? 's' : ''}, resto sin abastecimiento` : 'Sin abastecimiento';
   if (!d.inmediata) return plazo;
   return `${d.inmediata} inmediata${d.inmediata > 1 ? 's' : ''}, resto ${dias ? 'en ' : ''}${plazo}`;
 }
 function bloqueDispo(l, i) {
   const d = dispoDe(l); const resto = l.cant - d.inmediata;
   return `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #25324d">
-    <span class="${resto > 0 ? 'tag t-amber' : 'tag t-green'}">${resto > 0 ? (d.inmediata ? d.inmediata + ' inmediatas' : 'Sin stock') : 'Disponible'}</span>
+    <span class="${resto > 0 ? (d.sinAbast ? 'tag t-red' : 'tag t-amber') : 'tag t-green'}">${resto > 0 ? (d.sinAbast && !d.inmediata ? 'Sin abastecimiento' : d.inmediata ? d.inmediata + ' inmediatas' : 'Sin stock') : 'Disponible'}</span>
     <span class="muted">inmed.</span> <input class="in" type="number" min="0" max="${l.cant}" value="${d.inmediata}" title="Unidades disponibles ya (stock + sobre stock: ${fmt(stockTotal(l.cod), 0)})" style="width:52px;padding:2px 4px" onchange="ponerDispo(${i},'inmediata',this.value)">
-    ${resto > 0 ? `<span class="muted">resto en</span> <input class="in" type="number" min="0" value="${d.dias}" placeholder="días" style="width:56px;padding:2px 4px" onchange="ponerDispo(${i},'dias',this.value)"> <span class="muted">días</span>` : ''}
+    ${resto > 0 ? (d.sinAbast ? '' : `<span class="muted">resto en</span> <input class="in" type="number" min="0" value="${d.dias}" placeholder="días" style="width:56px;padding:2px 4px" onchange="ponerDispo(${i},'dias',this.value)"> <span class="muted">días</span>`)
+      + `<label style="display:block;margin-top:3px;cursor:pointer;font-size:12px"><input type="checkbox" ${d.sinAbast ? 'checked' : ''} onchange="ponerDispo(${i},'sinAbast',this.checked)"> sin abastecimiento</label>` : ''}
     ${d.manual ? ` <a href="#" style="font-size:11px" onclick="ponerDispo(${i},'auto');return false" title="Volver a calcular con el stock">↺</a>` : ''}</div>`;
 }
 function ponerDispo(i, campo, v) {
   const l = B().items[i]; const d = dispoDe(l);
-  if (campo === 'auto') l.dispo = { manual: false, dias: d.dias };
-  else if (campo === 'inmediata') l.dispo = { manual: true, inmediata: Math.min(l.cant, Math.max(0, parseInt(v) || 0)), dias: d.dias };
-  else l.dispo = { manual: d.manual, inmediata: d.inmediata, dias: v === '' ? '' : Math.max(0, parseInt(v) || 0) };
+  if (campo === 'auto') l.dispo = { manual: false, dias: d.dias, sinAbast: d.sinAbast };
+  else if (campo === 'inmediata') l.dispo = { manual: true, inmediata: Math.min(l.cant, Math.max(0, parseInt(v) || 0)), dias: d.dias, sinAbast: d.sinAbast };
+  else if (campo === 'sinAbast') l.dispo = { ...d, sinAbast: !!v };
+  else l.dispo = { ...d, dias: v === '' ? '' : Math.max(0, parseInt(v) || 0) };
   guardar('borrador'); pintar();
 }
 let guardandoPresu = false;
