@@ -162,7 +162,7 @@ function abrirEnCotizador(id) {
   const p = S.presupuestos.find(x => x.id === id);
   if (!puedePisarBorrador()) return;
   const venc = estadoPresu(p) === 'vencido';
-  S.borrador = { editandoId: p.id, clienteId: p.clienteId, validezDias: p.validezDias, fecha: venc ? hoyISO() : p.fecha, dolar: venc ? S.dolar : p.dolar, items: p.items.map(l => ({ ...l })), notas: p.notas || '' };
+  S.borrador = { editandoId: p.id, clienteId: p.clienteId, validezDias: p.validezDias, fecha: venc ? hoyISO() : p.fecha, dolar: venc ? S.dolar : p.dolar, items: p.items.map(l => ({ ...l })), notas: p.notas || '', mostrarDispo: !!(p.opciones && p.opciones.mostrarDispo) };
   if (venc) recalcularBorrador(true);
   guardar('borrador'); ir('cotizador');
   if (venc) aviso('Estaba vencido: precios recalculados con la lista y el dólar de hoy. La validez corre desde hoy.', '');
@@ -170,7 +170,7 @@ function abrirEnCotizador(id) {
 function duplicar(id) {
   const p = S.presupuestos.find(x => x.id === id);
   if (!puedePisarBorrador()) return;
-  S.borrador = { editandoId: null, clienteId: p.clienteId, validezDias: p.validezDias, fecha: hoyISO(), dolar: S.dolar, items: p.items.map(l => { const c = { ...l }; delete c.vendido; delete c.motivo; return c; }), notas: p.notas || '' };
+  S.borrador = { editandoId: null, clienteId: p.clienteId, validezDias: p.validezDias, fecha: hoyISO(), dolar: S.dolar, items: p.items.map(l => { const c = { ...l }; delete c.vendido; delete c.motivo; if (c.dispo && !c.dispo.manual) delete c.dispo; return c; }), notas: p.notas || '', mostrarDispo: !!(p.opciones && p.opciones.mostrarDispo) };
   recalcularBorrador(true); guardar('borrador'); ir('cotizador'); aviso('Copia lista en el cotizador con precios de hoy', 'ok');
 }
 function recalcularBorrador(conLista) {

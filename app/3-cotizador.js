@@ -32,7 +32,8 @@ VISTAS.cotizador = function () {
     <div class="panel"><span class="lbl">Validez del presupuesto</span>
       <div class="fila"><input class="in" type="number" min="1" style="width:80px" value="${b.validezDias}" onchange="B().validezDias=Math.max(1,parseInt(this.value)||1);guardar('borrador');pintar()">
       <span>días · hasta <b>${fechaAR(sumarDias(b.fecha, b.validezDias))}</b></span></div>
-      <div class="muted" style="margin-top:6px;font-size:12px">Dentro de la validez se respeta el precio.</div></div>
+      <div class="muted" style="margin-top:6px;font-size:12px">Dentro de la validez se respeta el precio.</div>
+      <label class="fila" style="margin-top:10px;cursor:pointer;gap:6px"><input type="checkbox" ${b.mostrarDispo ? 'checked' : ''} onchange="B().mostrarDispo=this.checked;guardar('borrador');pintar()"> <b>Mostrar disponibilidad al cliente</b></label></div>
     <div class="panel"><span class="lbl">Escala de descuentos del cliente (se aplica sola según la D del código)</span>
       <div class="fila">${cli ? chipsEscala(cli) : '<span class="muted">Elegí un cliente</span>'}</div>
       ${raros.length ? `<div style="margin-top:6px"><span class="tag t-red" style="white-space:normal">D${raros.join(', D')}: valor sin interpretar (${raros.map(d => esc(cli.desc[d])).join(', ')}) → poné el % a mano en la línea</span></div>` : ''}
@@ -91,7 +92,8 @@ function tablaBorrador(b, cli) {
       <td class="der num">${plata(l.unit)}</td>
       <td class="der num">${plata(l.sub)}</td>
       <td style="font-size:12px">${a.stock !== null ? `<span class="${Number(a.stock) >= l.cant ? '' : 'muted'}">${esc(a.stock)} u. · ${esc(a.ubic)}</span>` : '<span class="muted">sin stock en depósito</span>'}${a.sobre ? ` <span class="muted">+${a.sobre} sobre stock</span>` : ''}<br>
-        ${a.enLista || marca !== 'IVECO' ? (a.repos ? etiquetasArticulo({ ...a, enLista: true }) : '') : etiquetasArticulo(a)}</td>
+        ${a.enLista || marca !== 'IVECO' ? (a.repos ? etiquetasArticulo({ ...a, enLista: true }) : '') : etiquetasArticulo(a)}
+        ${bloqueDispo(l, i)}</td>
       <td><button class="btn chico rojo" onclick="quitarLinea(${i})">✕</button></td></tr>`;
   }).join('')}</table>`;
 }
@@ -263,8 +265,38 @@ function armarDesdeBorrador() {
   return {
     id: ed ? ed.id : null, num: ed ? ed.num : null, clienteId: b.clienteId, clienteNombre: cli ? cli.nombre : '', categoria: cli ? cli.categoria : '',
     escala: cli ? { ...cli.desc } : {}, fecha: b.fecha, validezDias: b.validezDias, hasta: sumarDias(b.fecha, b.validezDias), dolar: b.dolar,
-    items: b.items.map(l => ({ ...l })), notas: b.notas, sub: t.sub, borrador: !ed
+    items: b.items.map(l => { const c = { ...l }; c.dispo = dispoDe(l); return c; }), notas: b.notas, sub: t.sub, borrador: !ed,
+    opciones: { mostrarDispo: !!b.mostrarDispo }
   };
+}
+// ---- disponibilidad (stock del depósito + sobre stock)
+function stockTotal(cod) { const a = infoArticulo(cod); const n = parseFloat(String(a.stock === null ? 0 : a.stock).replace(',', '.')); return Math.max(0, (isNaN(n) ? 0 : n) + (a.sobre || 0)); }
+function dispoDe(l) {
+  const d = l.dispo || {};
+  const inm = d.manual ? Math.min(l.cant, Math.max(0, Number(d.inmediata) || 0)) : Math.min(l.cant, Math.floor(stockTotal(l.cod)));
+  return { manual: !!d.manual, inmediata: inm, dias: d.dias === undefined || d.dias === null ? '' : d.dias };
+}
+function textoDispo(l) {
+  const d = l.dispo || dispoDe(l); const resto = l.cant - d.inmediata; const dias = d.dias !== '' && d.dias !== undefined ? Number(d.dias) : null;
+  const plazo = dias ? dias + (dias === 1 ? ' día' : ' días') : 'a confirmar';
+  if (resto <= 0) return 'Inmediata';
+  if (!d.inmediata) return plazo;
+  return `${d.inmediata} inmediata${d.inmediata > 1 ? 's' : ''}, resto ${dias ? 'en ' : ''}${plazo}`;
+}
+function bloqueDispo(l, i) {
+  const d = dispoDe(l); const resto = l.cant - d.inmediata;
+  return `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #25324d">
+    <span class="${resto > 0 ? 'tag t-amber' : 'tag t-green'}">${resto > 0 ? (d.inmediata ? d.inmediata + ' inmediatas' : 'Sin stock') : 'Disponible'}</span>
+    <span class="muted">inmed.</span> <input class="in" type="number" min="0" max="${l.cant}" value="${d.inmediata}" title="Unidades disponibles ya (stock + sobre stock: ${fmt(stockTotal(l.cod), 0)})" style="width:52px;padding:2px 4px" onchange="ponerDispo(${i},'inmediata',this.value)">
+    ${resto > 0 ? `<span class="muted">resto en</span> <input class="in" type="number" min="0" value="${d.dias}" placeholder="días" style="width:56px;padding:2px 4px" onchange="ponerDispo(${i},'dias',this.value)"> <span class="muted">días</span>` : ''}
+    ${d.manual ? ` <a href="#" style="font-size:11px" onclick="ponerDispo(${i},'auto');return false" title="Volver a calcular con el stock">↺</a>` : ''}</div>`;
+}
+function ponerDispo(i, campo, v) {
+  const l = B().items[i]; const d = dispoDe(l);
+  if (campo === 'auto') l.dispo = { manual: false, dias: d.dias };
+  else if (campo === 'inmediata') l.dispo = { manual: true, inmediata: Math.min(l.cant, Math.max(0, parseInt(v) || 0)), dias: d.dias };
+  else l.dispo = { manual: d.manual, inmediata: d.inmediata, dias: v === '' ? '' : Math.max(0, parseInt(v) || 0) };
+  guardar('borrador'); pintar();
 }
 let guardandoPresu = false;
 async function guardarPresupuesto() {

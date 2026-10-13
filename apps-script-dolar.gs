@@ -24,7 +24,7 @@ const TABLAS = {
   presupuestos: [['id', 'ID'], ['num', 'N°', 'n'], ['fecha', 'Fecha'], ['clienteNombre', 'Cliente'], ['estadoTxt', 'Estado'], ['totalSinIva', 'Total + IVA', 'n'],
     ['vendidoSinIva', 'Vendido + IVA', 'n'], ['hasta', 'Válido hasta'], ['validezDias', 'Días de validez', 'n'], ['dolar', 'Dólar', 'n'], ['motivos', 'Motivos no venta'],
     ['notas', 'Observaciones'], ['clienteId', 'ID cliente'], ['categoria', 'Categoría'], ['estado', 'Estado interno'], ['cierre', 'Cierre', 'j'],
-    ['escala', 'Escala', 'j'], ['items', 'Ítems', 'j'], ['historial', 'Historial', 'j'], ['creado', 'Creado', 'n']],
+    ['escala', 'Escala', 'j'], ['items', 'Ítems', 'j'], ['historial', 'Historial', 'j'], ['creado', 'Creado', 'n'], ['opciones', 'Opciones', 'j']],
   agenda: [['id', 'ID'], ['fecha', 'Fecha'], ['texto', 'Qué es'], ['clienteNombre', 'Cliente'], ['anual', 'Todos los años', 'b'], ['clienteId', 'ID cliente']],
   notas: [['id', 'Código'], ['texto', 'Anotación'], ['fecha', 'Fecha'], ['ts', 'TS', 'n']],
   reemplazos: [['id', 'Código pedido'], ['nuevo', 'Código nuevo']],
