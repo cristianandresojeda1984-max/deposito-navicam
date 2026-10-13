@@ -190,7 +190,7 @@ table.t tr.sel td{background:#172744}
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-13 10:49</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-13 13:11</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -1074,7 +1074,7 @@ function textoDispo(l) {
 }
 function bloqueDispo(l, i) {
   const d = dispoDe(l); const resto = l.cant - d.inmediata;
-  return `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #25324d">
+  return `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #25324d">${B().mostrarDispo ? '' : '<div class="muted" style="font-size:11px;margin-bottom:3px">No se muestra al cliente</div>'}
     <span class="${resto > 0 ? (d.sinAbast ? 'tag t-red' : 'tag t-amber') : 'tag t-green'}">${resto > 0 ? (d.sinAbast && !d.inmediata ? 'Sin abastecimiento' : d.inmediata ? d.inmediata + ' inmediatas' : 'Sin stock') : 'Disponible'}</span>
     <span class="muted">inmed.</span> <input class="in" type="number" min="0" max="${l.cant}" value="${d.inmediata}" title="Unidades disponibles ya (stock + sobre stock: ${fmt(stockTotal(l.cod), 0)})" style="width:52px;padding:2px 4px" onchange="ponerDispo(${i},'inmediata',this.value)">
     ${resto > 0 ? (d.sinAbast ? '' : `<span class="muted">resto en</span> <input class="in" type="number" min="0" value="${d.dias}" placeholder="días" style="width:56px;padding:2px 4px" onchange="ponerDispo(${i},'dias',this.value)"> <span class="muted">días</span>`)
@@ -1087,6 +1087,7 @@ function ponerDispo(i, campo, v) {
   else if (campo === 'inmediata') l.dispo = { manual: true, inmediata: Math.min(l.cant, Math.max(0, parseInt(v) || 0)), dias: d.dias, sinAbast: d.sinAbast };
   else if (campo === 'sinAbast') l.dispo = { ...d, sinAbast: !!v };
   else l.dispo = { ...d, dias: v === '' ? '' : Math.max(0, parseInt(v) || 0) };
+  if (campo !== 'auto' && !B().mostrarDispo) { B().mostrarDispo = true; aviso('Activé “Mostrar disponibilidad al cliente”: va a salir en el PDF. Si no querés, destildalo.', 'ok'); }
   guardar('borrador'); pintar();
 }
 let guardandoPresu = false;
@@ -1174,6 +1175,7 @@ function detallePresu(p) {
     <div class="sep"></div>
     ${abierto ? bloqueConfirmar(p) : bloqueResultado(p)}
     <div class="sep"></div>
+    <label class="fila" style="cursor:pointer;gap:6px;margin-bottom:10px"><input type="checkbox" ${verDispo(p) ? 'checked' : ''} onchange="cambiarMostrarDispo('${p.id}',this.checked)"> <b>Mostrar disponibilidad al cliente</b> <span class="muted" style="font-size:12px">(en el PDF, la vista cliente, WhatsApp y Excel)</span></label>
     <div class="fila">
       ${abierto ? `<button class="btn azul" onclick="abrirEnCotizador('${p.id}')">✎ Modificar</button>` : `<span class="tag t-gris" style="padding:8px 10px" title="Ya se confirmó la venta o se desestimó">🔒 Cerrado</span><button class="btn" onclick="reabrir('${p.id}')" title="Solo para corregir una confirmación hecha por error">Reabrir (corregir)</button>`}
       <button class="btn" onclick="duplicar('${p.id}')">Copiar a un presupuesto nuevo</button>
@@ -1283,6 +1285,14 @@ async function eliminarPresu(id) {
   if (!confirm('¿Eliminar el presupuesto ' + numPresu(p) + ' de ' + p.clienteNombre + '? No se puede deshacer.')) return;
   if (!await docBorrar('presupuestos', id, { tipo: 'Presupuesto', detalle: numPresu(p) + ' eliminado (' + p.clienteNombre + ')' })) return;
   S.presupuestos = S.presupuestos.filter(x => x.id !== id); guardar('presupuestos'); presuSel = null; pintar();
+}
+// Mostrar u ocultar la disponibilidad al cliente: se puede cambiar siempre (solo afecta lo que ve el cliente)
+async function cambiarMostrarDispo(id, si) {
+  const p = S.presupuestos.find(x => x.id === id);
+  const nuevo = { ...p, opciones: { ...(p.opciones || {}), mostrarDispo: !!si } };
+  if (!await docGuardar('presupuestos', presuADoc(nuevo), { tipo: 'Presupuesto', detalle: `${numPresu(p)}: disponibilidad ${si ? 'visible' : 'oculta'} para el cliente` })) { pintar(); return; }
+  Object.assign(p, { opciones: nuevo.opciones }); guardar('presupuestos'); pintar();
+  aviso(si ? 'La disponibilidad ahora sale en el PDF' : 'La disponibilidad ya no sale en el PDF', 'ok');
 }
 function puedePisarBorrador() {
   return !(S.borrador && S.borrador.items.length) || confirm('Hay otro presupuesto a medio hacer en el cotizador. ¿Descartarlo?');
@@ -2226,7 +2236,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-13 10:49';
+const VERSION_APP = '2026-10-13 13:11';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));

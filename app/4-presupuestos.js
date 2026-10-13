@@ -56,6 +56,7 @@ function detallePresu(p) {
     <div class="sep"></div>
     ${abierto ? bloqueConfirmar(p) : bloqueResultado(p)}
     <div class="sep"></div>
+    <label class="fila" style="cursor:pointer;gap:6px;margin-bottom:10px"><input type="checkbox" ${verDispo(p) ? 'checked' : ''} onchange="cambiarMostrarDispo('${p.id}',this.checked)"> <b>Mostrar disponibilidad al cliente</b> <span class="muted" style="font-size:12px">(en el PDF, la vista cliente, WhatsApp y Excel)</span></label>
     <div class="fila">
       ${abierto ? `<button class="btn azul" onclick="abrirEnCotizador('${p.id}')">✎ Modificar</button>` : `<span class="tag t-gris" style="padding:8px 10px" title="Ya se confirmó la venta o se desestimó">🔒 Cerrado</span><button class="btn" onclick="reabrir('${p.id}')" title="Solo para corregir una confirmación hecha por error">Reabrir (corregir)</button>`}
       <button class="btn" onclick="duplicar('${p.id}')">Copiar a un presupuesto nuevo</button>
@@ -165,6 +166,14 @@ async function eliminarPresu(id) {
   if (!confirm('¿Eliminar el presupuesto ' + numPresu(p) + ' de ' + p.clienteNombre + '? No se puede deshacer.')) return;
   if (!await docBorrar('presupuestos', id, { tipo: 'Presupuesto', detalle: numPresu(p) + ' eliminado (' + p.clienteNombre + ')' })) return;
   S.presupuestos = S.presupuestos.filter(x => x.id !== id); guardar('presupuestos'); presuSel = null; pintar();
+}
+// Mostrar u ocultar la disponibilidad al cliente: se puede cambiar siempre (solo afecta lo que ve el cliente)
+async function cambiarMostrarDispo(id, si) {
+  const p = S.presupuestos.find(x => x.id === id);
+  const nuevo = { ...p, opciones: { ...(p.opciones || {}), mostrarDispo: !!si } };
+  if (!await docGuardar('presupuestos', presuADoc(nuevo), { tipo: 'Presupuesto', detalle: `${numPresu(p)}: disponibilidad ${si ? 'visible' : 'oculta'} para el cliente` })) { pintar(); return; }
+  Object.assign(p, { opciones: nuevo.opciones }); guardar('presupuestos'); pintar();
+  aviso(si ? 'La disponibilidad ahora sale en el PDF' : 'La disponibilidad ya no sale en el PDF', 'ok');
 }
 function puedePisarBorrador() {
   return !(S.borrador && S.borrador.items.length) || confirm('Hay otro presupuesto a medio hacer en el cotizador. ¿Descartarlo?');
