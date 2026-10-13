@@ -47,6 +47,7 @@ VISTAS.cotizador = function () {
       <div class="campo" style="width:90px"><span class="lbl">Cantidad</span><input class="in" id="cantNueva" type="number" min="1" value="1" onkeydown="if(event.key==='Enter')agregarDesdeBuscador()"></div>
       <button class="btn pri" onclick="agregarDesdeBuscador()">Agregar</button>
       <button class="btn" onclick="formPegar()">Pegar lista desde Excel</button>
+      <button class="btn" onclick="formCopiarAnterior()">Copiar de un presupuesto anterior</button>
     </div>
     <div class="tabla-scroll" style="margin-top:14px">${tablaBorrador(b, cli)}</div>
     ${b.items.length ? `<div class="fila" style="justify-content:space-between;align-items:flex-start;margin-top:14px">
