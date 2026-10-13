@@ -57,7 +57,7 @@ function detallePresu(p) {
     ${abierto ? bloqueConfirmar(p) : bloqueResultado(p)}
     <div class="sep"></div>
     <div class="fila">
-      ${abierto ? `<button class="btn azul" onclick="abrirEnCotizador('${p.id}')">✎ Modificar</button>` : `<span class="tag t-gris" style="padding:8px 10px" title="Ya se confirmó la venta o se desestimó">🔒 Cerrado: no se modifica</span>`}
+      ${abierto ? `<button class="btn azul" onclick="abrirEnCotizador('${p.id}')">✎ Modificar</button>` : `<span class="tag t-gris" style="padding:8px 10px" title="Ya se confirmó la venta o se desestimó">🔒 Cerrado</span><button class="btn" onclick="reabrir('${p.id}')" title="Solo para corregir una confirmación hecha por error">Reabrir (corregir)</button>`}
       <button class="btn" onclick="duplicar('${p.id}')">Copiar a un presupuesto nuevo</button>
       <button class="btn" onclick="vistaCliente(S.presupuestos.find(x=>x.id==='${p.id}'))">Vista cliente / PDF</button>
       <button class="btn" onclick="enviarWhatsApp(S.presupuestos.find(x=>x.id==='${p.id}'))">WhatsApp${cli && cli.whatsapp ? '' : ' (sin número)'}</button>

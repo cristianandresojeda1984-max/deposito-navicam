@@ -6,4 +6,5 @@ js = '\n'.join((s / f).read_text() for f in sorted(p.name for p in s.glob('[0-9]
 v = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))).strftime('%Y-%m-%d %H:%M')
 h = h.replace('/*CSS*/', (s / 'app.css').read_text()).replace('/*JS*/', js).replace('/*VERSION*/', v)
 (r / 'index.html').write_text(h)
+(r / 'version.txt').write_text(v + '\n')
 print('index.html', len(h), v)

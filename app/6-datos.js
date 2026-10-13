@@ -17,6 +17,7 @@ VISTAS.datos = function () {
       <div class="muted" style="font-size:12px;margin-bottom:8px">Todos los datos están en la planilla “Navicam App Datos” del Drive del trabajo. Se puede abrir y editar a mano: los dispositivos toman los cambios solos.</div>
       <div class="fila">${planillaUrl ? `<a class="btn azul" href="${esc(planillaUrl)}" target="_blank">Abrir la planilla</a>` : ''}<button class="btn" onclick="sincronizar(true).then(()=>aviso('Datos actualizados','ok'))">↻ Volver a bajar todo</button>
       <button class="btn" onclick="borrarCopiaLocal()">Borrar la copia de este dispositivo</button></div></div>
+    <div class="panel"><h3>Instalar la app</h3>${bloqueInstalar()}</div>
     <div class="panel"><h3>Datos que salen en el presupuesto del cliente</h3>
       <div class="campo"><span class="lbl">Nombre de la empresa</span><input class="in" id="aEmp" value="${esc(a.empresa)}"></div>
       <div class="campo" style="margin-top:8px"><span class="lbl">Dirección, teléfono, e-mail</span><input class="in" id="aDat" value="${esc(a.datosEmpresa)}"></div>

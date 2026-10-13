@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Navicam · Repuestos Rosario</title>
 <meta name="theme-color" content="#0b1220">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icono-192.png">
+<link rel="apple-touch-icon" href="icons/icono-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Navicam">
 <style>
 :root{
   --bg:#0b1220;--panel:#121b2e;--panel2:#18233a;--line:#25324d;--txt:#e6ebf5;--muted:#8d9ab3;
@@ -180,7 +185,7 @@ table.t tr.sel td{background:#172744}
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión 2026-10-13 09:52</div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-13 09:59</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -1161,7 +1166,7 @@ function detallePresu(p) {
     ${abierto ? bloqueConfirmar(p) : bloqueResultado(p)}
     <div class="sep"></div>
     <div class="fila">
-      ${abierto ? `<button class="btn azul" onclick="abrirEnCotizador('${p.id}')">✎ Modificar</button>` : `<span class="tag t-gris" style="padding:8px 10px" title="Ya se confirmó la venta o se desestimó">🔒 Cerrado: no se modifica</span>`}
+      ${abierto ? `<button class="btn azul" onclick="abrirEnCotizador('${p.id}')">✎ Modificar</button>` : `<span class="tag t-gris" style="padding:8px 10px" title="Ya se confirmó la venta o se desestimó">🔒 Cerrado</span><button class="btn" onclick="reabrir('${p.id}')" title="Solo para corregir una confirmación hecha por error">Reabrir (corregir)</button>`}
       <button class="btn" onclick="duplicar('${p.id}')">Copiar a un presupuesto nuevo</button>
       <button class="btn" onclick="vistaCliente(S.presupuestos.find(x=>x.id==='${p.id}'))">Vista cliente / PDF</button>
       <button class="btn" onclick="enviarWhatsApp(S.presupuestos.find(x=>x.id==='${p.id}'))">WhatsApp${cli && cli.whatsapp ? '' : ' (sin número)'}</button>
@@ -1709,6 +1714,7 @@ VISTAS.datos = function () {
       <div class="muted" style="font-size:12px;margin-bottom:8px">Todos los datos están en la planilla “Navicam App Datos” del Drive del trabajo. Se puede abrir y editar a mano: los dispositivos toman los cambios solos.</div>
       <div class="fila">${planillaUrl ? `<a class="btn azul" href="${esc(planillaUrl)}" target="_blank">Abrir la planilla</a>` : ''}<button class="btn" onclick="sincronizar(true).then(()=>aviso('Datos actualizados','ok'))">↻ Volver a bajar todo</button>
       <button class="btn" onclick="borrarCopiaLocal()">Borrar la copia de este dispositivo</button></div></div>
+    <div class="panel"><h3>Instalar la app</h3>${bloqueInstalar()}</div>
     <div class="panel"><h3>Datos que salen en el presupuesto del cliente</h3>
       <div class="campo"><span class="lbl">Nombre de la empresa</span><input class="in" id="aEmp" value="${esc(a.empresa)}"></div>
       <div class="campo" style="margin-top:8px"><span class="lbl">Dirección, teléfono, e-mail</span><input class="in" id="aDat" value="${esc(a.datosEmpresa)}"></div>
@@ -2199,6 +2205,52 @@ async function migrarNotasViejas() {
   // liberar el espacio que usaba la app anterior
   ['navicam_precios', 'navicam_stock', 'navicam_sobre', 'navicam_cajones', 'navicam_registro', 'navicam_historial'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
   S.metas.notasViejas = true; guardar('metas');
+}
+
+// ============ Instalable como app (PWA) y siempre actualizada ============
+const VERSION_APP = '2026-10-13 09:59';
+const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
+if ('serviceWorker' in navigator && SEGURO) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));
+}
+// Cada 5 minutos (y al volver a la app) se fija si hay una versión publicada más nueva
+let avisoVersion = false;
+async function revisarVersion() {
+  if (avisoVersion || !SEGURO) return;
+  try {
+    const r = await fetch('version.txt?_=' + Date.now(), { cache: 'no-store' });
+    const v = (await r.text()).trim();
+    if (v && v !== VERSION_APP) {
+      avisoVersion = true;
+      const d = document.createElement('div');
+      d.className = 'ok';
+      d.innerHTML = `Hay una versión nueva de la app. <button class="btn chico pri" style="margin-left:8px" onclick="actualizarApp()">Actualizar</button>`;
+      document.getElementById('toast').appendChild(d);
+    }
+  } catch (e) {}
+}
+async function actualizarApp() {
+  try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.update())); } catch (e) {}
+  location.reload();
+}
+setInterval(revisarVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarVersion(); });
+setTimeout(revisarVersion, 15000);
+// Botón "Instalar" (Chrome / Edge en PC y Android)
+let pedidoInstalar = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); pedidoInstalar = e; if (vista === 'datos') pintar(); });
+window.addEventListener('appinstalled', () => { pedidoInstalar = null; aviso('App instalada', 'ok'); });
+function appInstalada() { return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone; }
+async function instalarApp() {
+  if (!pedidoInstalar) return;
+  pedidoInstalar.prompt(); await pedidoInstalar.userChoice; pedidoInstalar = null; pintar();
+}
+function bloqueInstalar() {
+  if (appInstalada()) return '<div class="muted">✓ Estás usando la app instalada. Se actualiza sola cuando hay cambios.</div>';
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return (pedidoInstalar ? '<button class="btn pri" onclick="instalarApp()">⬇ Instalar Navicam en este dispositivo</button>' : '')
+    + `<div class="muted" style="font-size:12px;margin-top:8px">${ios ? 'En iPhone: tocá Compartir y después “Agregar a inicio”.'
+      : 'En la PC (Chrome o Edge): ícono de instalar en la barra de direcciones, o menú ⋮ → “Instalar Navicam”. En Android: menú ⋮ → “Instalar app”.'} Queda con su propio ícono y ventana, y se actualiza sola cuando publico cambios.</div>`;
 }
 
 </script>
