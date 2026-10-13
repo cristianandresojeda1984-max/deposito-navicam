@@ -190,7 +190,7 @@ table.t tr.sel td{background:#172744}
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-13 10:12</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-13 10:49</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -933,7 +933,7 @@ async function ponerReemplazo(i, nuevo, pedido) {
   if (S.reemplazos[viejo] === nuevo) { aviso(`${viejo} reemplazado por ${nuevo}`, 'ok'); return; }
   const r = await docGuardar('reemplazos', { id: viejo, nuevo }, { tipo: 'Reemplazo', detalle: `${viejo} → ${nuevo}` });
   if (!r) { aviso(`El renglón quedó con ${nuevo}, pero el reemplazo no se pudo guardar en la planilla. Probá de nuevo desde Datos y ajustes.`, 'err'); return; }
-  S.reemplazos[viejo] = nuevo; guardar('reemplazos'); pintarSeguro();
+  S.reemplazos[viejo] = nuevo; ultimoReemp = viejo; guardar('reemplazos'); pintarSeguro();
   aviso(`Reemplazo guardado: ${viejo} → ${nuevo}`, 'ok');
 }
 function quitarReemplazo(i) {
@@ -1735,8 +1735,10 @@ VISTAS.datos = function () {
       <div class="fila" style="margin-top:8px"><input class="in" id="motNuevo" placeholder="Nuevo motivo" style="max-width:260px" onkeydown="if(event.key==='Enter')agregarMotivoAjustes()"><button class="btn" onclick="agregarMotivoAjustes()">Agregar</button></div></div>
     <div class="panel"><h3>Reemplazos de códigos</h3>
       <div class="muted" style="font-size:12px;margin-bottom:8px">Cuando alguien cotiza el código de la izquierda, el cotizador ofrece el de la derecha. Se agregan solos al poner un reemplazo en un presupuesto.</div>
-      <div style="max-height:260px;overflow:auto">${Object.keys(S.reemplazos).sort().map(v => `<div class="fila" style="padding:3px 0"><span class="num" style="min-width:110px">${esc(v)}</span>→<span class="num" style="min-width:110px;color:var(--amber)">${esc(S.reemplazos[v])}</span><span class="muted" style="font-size:12px;flex:1">${esc(infoArticulo(S.reemplazos[v]).desc)}</span><button class="btn chico rojo" data-v="${esc(v)}" onclick="borrarReemplazo(this.dataset.v)">✕</button></div>`).join('') || '<span class="muted">Todavía no hay reemplazos.</span>'}</div>
-      <div class="fila" style="margin-top:8px"><input class="in" id="rViejo" placeholder="Código que piden" style="max-width:160px"> → <input class="in" id="rNuevo" placeholder="Código nuevo" style="max-width:160px" onkeydown="if(event.key==='Enter')agregarReemplazoAjustes()"><button class="btn" onclick="agregarReemplazoAjustes()">Agregar</button></div></div>
+      <div style="max-height:260px;overflow:auto">${Object.keys(S.reemplazos).sort((x, y) => (x === ultimoReemp ? -1 : y === ultimoReemp ? 1 : x.localeCompare(y))).map(v => `<div style="display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;padding:6px 8px;margin-bottom:4px;border-radius:8px;${v === ultimoReemp ? 'background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4)' : 'border:1px solid var(--line)'}">
+        <div><span class="num">${esc(v)}</span> → <span class="num" style="color:var(--amber)">${esc(S.reemplazos[v])}</span>${v === ultimoReemp ? ' <span class="tag t-green">último cargado</span>' : ''}<div class="muted" style="font-size:12px">${esc(infoArticulo(S.reemplazos[v]).desc || '')}</div></div>
+        <button class="btn chico rojo" data-v="${esc(v)}" title="Borrar este reemplazo" onclick="borrarReemplazo(this.dataset.v)">✕</button></div>`).join('') || '<span class="muted">Todavía no hay reemplazos.</span>'}</div>
+      <div class="fila" style="margin-top:8px"><input class="in" id="rViejo" placeholder="Código que piden" style="max-width:160px" onkeydown="if(event.key==='Enter')document.getElementById('rNuevo').focus()"> → <input class="in" id="rNuevo" placeholder="Código nuevo" style="max-width:160px" onkeydown="if(event.key==='Enter')agregarReemplazoAjustes()"><button class="btn" onclick="agregarReemplazoAjustes()">Agregar</button></div></div>
     <div class="panel"><h3>Equivalencias NEXPRO</h3><div class="muted">${fmt(Object.keys(S.nexpro).length, 0)} códigos Iveco con equivalente NEXPRO. Se actualizan al importar la lista de precios (hoja NEXPRO).</div></div>
   </div>
   <div class="panel" style="margin-top:14px"><div class="fila" style="justify-content:space-between"><h3 style="margin:0">Registro de cambios</h3><button class="btn" onclick="ir('historial')">Ver el historial completo</button></div></div>`);
@@ -1779,11 +1781,16 @@ async function borrarReemplazo(v) {
   if (!await docBorrar('reemplazos', v, { tipo: 'Reemplazo', detalle: `Borrado ${v} → ${S.reemplazos[v]}` })) return;
   delete S.reemplazos[v]; guardar('reemplazos'); pintar();
 }
+let ultimoReemp = null;
 async function agregarReemplazoAjustes() {
   const v = limpiarCodigo(document.getElementById('rViejo').value), n = limpiarCodigo(document.getElementById('rNuevo').value);
-  if (v.length < 2 || n.length < 2 || v === n) { aviso('Poné los dos códigos', 'err'); return; }
+  if (v.length < 2 || n.length < 2) { aviso('Poné los dos códigos: el que piden y el nuevo', 'err'); return; }
+  if (v === n) { aviso('Los dos códigos son iguales', 'err'); return; }
+  if (S.reemplazos[v] === n) { ultimoReemp = v; pintar(); aviso(`Ese reemplazo ya estaba cargado: ${v} → ${n} (lo marqué en verde)`, 'ok'); return; }
+  if (S.reemplazos[v] && !confirm(`${v} ya tenía reemplazo: ${S.reemplazos[v]}. ¿Cambiarlo por ${n}?`)) return;
   if (!await docGuardar('reemplazos', { id: v, nuevo: n }, { tipo: 'Reemplazo', detalle: `${v} → ${n}` })) return;
-  S.reemplazos[v] = n; guardar('reemplazos'); pintar();
+  S.reemplazos[v] = n; ultimoReemp = v; guardar('reemplazos'); pintar();
+  aviso(`Reemplazo guardado: ${v} → ${n}`, 'ok');
 }
 
 // --- lectura de Excel
@@ -2219,7 +2226,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-13 10:12';
+const VERSION_APP = '2026-10-13 10:49';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));

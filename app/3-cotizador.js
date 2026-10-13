@@ -150,7 +150,7 @@ async function ponerReemplazo(i, nuevo, pedido) {
   if (S.reemplazos[viejo] === nuevo) { aviso(`${viejo} reemplazado por ${nuevo}`, 'ok'); return; }
   const r = await docGuardar('reemplazos', { id: viejo, nuevo }, { tipo: 'Reemplazo', detalle: `${viejo} → ${nuevo}` });
   if (!r) { aviso(`El renglón quedó con ${nuevo}, pero el reemplazo no se pudo guardar en la planilla. Probá de nuevo desde Datos y ajustes.`, 'err'); return; }
-  S.reemplazos[viejo] = nuevo; guardar('reemplazos'); pintarSeguro();
+  S.reemplazos[viejo] = nuevo; ultimoReemp = viejo; guardar('reemplazos'); pintarSeguro();
   aviso(`Reemplazo guardado: ${viejo} → ${nuevo}`, 'ok');
 }
 function quitarReemplazo(i) {
