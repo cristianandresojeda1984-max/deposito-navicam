@@ -57,11 +57,13 @@ function aplicarRespuesta(resp) {
   if (resp.resultado && resp.resultado.ubicaciones) { S.ubicCambios = resp.resultado.ubicaciones; guardar('ubicCambios'); }
 }
 // Envoltorio con aviso: devuelve la respuesta o null si falló (y avisa)
+let escribiendo = 0;   // mientras hay un guardado en camino no se baja nada, para no pisar lo recién cambiado
 async function remoto(op, textoEspera, ms) {
   const t = textoEspera ? avisoFijo(textoEspera) : null;
+  escribiendo++;
   try { return await enviarOp(op, ms); }
   catch (e) { aviso('❌ ' + e.message, 'err'); return null; }
-  finally { if (t) t.remove(); }
+  finally { escribiendo--; if (t) t.remove(); }
 }
 function avisoFijo(texto) { const d = document.createElement('div'); d.textContent = '⏳ ' + texto; document.getElementById('toast').appendChild(d); return d; }
 
@@ -154,7 +156,7 @@ function estadoSync(e) {
     + (planillaUrl ? ` · <a href="${esc(planillaUrl)}" target="_blank">planilla</a>` : '');
 }
 async function sincronizar(forzar) {
-  if (sincronizando) return; sincronizando = true;
+  if (sincronizando || escribiendo) return; sincronizando = true;
   let cambio = false;
   try {
     const d = await apiGet({ accion: 'estado' });

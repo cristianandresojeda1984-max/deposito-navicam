@@ -142,3 +142,8 @@ table.t tr.sel td{background:#172744}
   .tabla-scroll{overflow-x:auto}
 }
 .evento:hover{background:#172744}
+
+.btnAct{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:color .2s,border-color .2s}
+.btnAct:hover{color:var(--txt);border-color:var(--muted)}
+.btnAct.girando{animation:girar 1s linear infinite;pointer-events:none}
+@keyframes girar{to{transform:rotate(360deg)}}

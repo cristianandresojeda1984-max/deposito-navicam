@@ -130,24 +130,28 @@ function elegirNexpro(i, k) { const b = B(); const l = b.items[i]; aplicarMarca(
 // --- reemplazos
 function formReemplazo(i) {
   const l = B().items[i]; const base = baseDe(l);
-  abrirModal(`<h3 style="margin-top:0">Reemplazo para ${esc(base.cod)}</h3>
-    <p class="muted">${esc(base.desc)}. Poné el código que lo reemplaza: el renglón toma la descripción, el precio, la D y el stock del código nuevo, y queda anotado que es un reemplazo. El programa lo recuerda para la próxima vez.</p>
-    <div class="fila"><input class="in" id="codReemp" autofocus style="max-width:220px" placeholder="Código nuevo" oninput="const a=infoArticulo(limpiarCodigo(this.value));document.getElementById('prevReemp').innerHTML=a.desc?esc(a.desc)+(a.usd?' · '+plata(a.usd*S.dolar)+' + IVA':'')+(a.stock!==null?' · stock '+esc(a.stock):''):'<span class=muted>No está en la lista ni en el stock</span>'" onkeydown="if(event.key==='Enter')ponerReemplazo(${i},this.value)">
-    <button class="btn pri" onclick="ponerReemplazo(${i},document.getElementById('codReemp').value)">Reemplazar</button><button class="btn" onclick="cerrarModal()">Cancelar</button></div>
-    <div id="prevReemp" style="margin-top:8px;font-size:13px"></div>`);
+  const prev = id => `const a=infoArticulo(limpiarCodigo(this.value));document.getElementById('${id}').innerHTML=a.desc?esc(a.desc)+(a.usd?' · '+plata(a.usd*S.dolar)+' + IVA':'')+(a.stock!==null?' · stock '+esc(a.stock):''):'<span class=muted>No está en la lista ni en el stock</span>'`;
+  abrirModal(`<h3 style="margin-top:0">Poner un reemplazo</h3>
+    <p class="muted" style="margin-top:0">El renglón toma la descripción, el precio, la D y el stock del código nuevo, y queda anotado que es un reemplazo. El programa lo recuerda para la próxima vez.</p>
+    <div class="campo"><span class="lbl">Código que pidió el cliente</span><input class="in" id="codPedido" style="max-width:220px" value="${esc(base.cod)}" oninput="${prev('prevPedido')}"><div id="prevPedido" style="font-size:12px;margin-top:3px">${esc(base.desc || '')}</div></div>
+    <div style="margin:6px 0"><button class="btn chico" title="Dar vuelta los dos códigos" onclick="const x=document.getElementById('codPedido'),y=document.getElementById('codReemp');[x.value,y.value]=[y.value,x.value];x.dispatchEvent(new Event('input'));y.dispatchEvent(new Event('input'))">⇅ dar vuelta</button></div>
+    <div class="campo"><span class="lbl">Código nuevo (el que va en el presupuesto)</span><input class="in" id="codReemp" autofocus style="max-width:220px" placeholder="Código nuevo" oninput="${prev('prevReemp')}" onkeydown="if(event.key==='Enter')ponerReemplazo(${i},this.value,document.getElementById('codPedido').value)"><div id="prevReemp" style="font-size:12px;margin-top:3px"></div></div>
+    <div class="fila" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="ponerReemplazo(${i},document.getElementById('codReemp').value,document.getElementById('codPedido').value)">Reemplazar</button></div>`);
 }
-function ponerReemplazo(i, nuevo) {
-  nuevo = limpiarCodigo(nuevo); if (nuevo.length < 2) return;
-  const b = B(); const l = b.items[i]; const viejo = l.reemplazaA || baseDe(l).cod;
-  if (nuevo === viejo) { aviso('Es el mismo código', 'err'); return; }
+async function ponerReemplazo(i, nuevo, pedido) {
+  nuevo = limpiarCodigo(nuevo); if (nuevo.length < 2) { aviso('Poné el código nuevo', 'err'); return; }
+  const b = B(); const l = b.items[i];
+  const viejo = pedido !== undefined && limpiarCodigo(pedido).length >= 2 ? limpiarCodigo(pedido) : (l.reemplazaA || baseDe(l).cod);
+  if (nuevo === viejo) { aviso('Los dos códigos son iguales', 'err'); return; }
   if (!S.precios[nuevo] && !stockIdx.has(nuevo) && !confirm(`${nuevo} no está en la lista ni en el stock. ¿Usarlo igual?`)) return;
   l.reemplazaA = viejo; l.base = datosIveco(nuevo);
   aplicarMarca(l); recalcDesc(l, cliente(b.clienteId)); calcularLinea(l, b.dolar);
-  if (S.reemplazos[viejo] !== nuevo) {
-    S.reemplazos[viejo] = nuevo; guardar('reemplazos');
-    docGuardar('reemplazos', { id: viejo, nuevo }, { tipo: 'Reemplazo', detalle: `${viejo} → ${nuevo}` });   // se comparte en segundo plano
-  }
-  guardar('borrador'); cerrarModal(); pintar(); aviso(`${viejo} reemplazado por ${nuevo}`, 'ok');
+  guardar('borrador'); cerrarModal(); pintar();
+  if (S.reemplazos[viejo] === nuevo) { aviso(`${viejo} reemplazado por ${nuevo}`, 'ok'); return; }
+  const r = await docGuardar('reemplazos', { id: viejo, nuevo }, { tipo: 'Reemplazo', detalle: `${viejo} → ${nuevo}` });
+  if (!r) { aviso(`El renglón quedó con ${nuevo}, pero el reemplazo no se pudo guardar en la planilla. Probá de nuevo desde Datos y ajustes.`, 'err'); return; }
+  S.reemplazos[viejo] = nuevo; guardar('reemplazos'); pintarSeguro();
+  aviso(`Reemplazo guardado: ${viejo} → ${nuevo}`, 'ok');
 }
 function quitarReemplazo(i) {
   const b = B(); const l = b.items[i];

@@ -24,6 +24,20 @@ async function actualizarApp() {
   try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.update())); } catch (e) {}
   location.reload();
 }
+// Botón ↻ de arriba a la izquierda: si hay versión nueva la carga; si no, trae los últimos cambios de la planilla
+async function actualizarTodo(btn) {
+  const botones = document.querySelectorAll('.btnAct'); botones.forEach(b => b.classList.add('girando'));
+  try {
+    if (SEGURO) {
+      try {
+        const v = (await (await fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })).text()).trim();
+        if (v && v !== VERSION_APP) { aviso('Cargando la versión nueva…', 'ok'); await actualizarApp(); return; }
+      } catch (e) {}
+    }
+    await sincronizar(); refrescarRegistro();
+    aviso('Todo al día', 'ok');
+  } finally { botones.forEach(b => b.classList.remove('girando')); }
+}
 setInterval(revisarVersion, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarVersion(); });
 setTimeout(revisarVersion, 15000);

@@ -20,13 +20,13 @@
 <body>
 <div id="carga">Cargando datos…</div>
 <div id="topMovil">
-  <button class="btn" onclick="menuMovil()">☰</button>
+  <span class="fila" style="gap:6px;flex-wrap:nowrap"><button class="btn" onclick="menuMovil()">☰</button><button class="btnAct" onclick="actualizarTodo(this)" title="Actualizar">↻</button></span>
   <b>Navicam</b>
   <span class="fila" style="gap:8px;flex-wrap:nowrap"><span id="syncMovil" title="Sincronización" style="width:9px;height:9px;border-radius:50%;background:var(--amber)"></span><span class="chip" id="dolarMovil" onclick="editarDolar()">USD —</span></span>
 </div>
 <div id="app">
   <aside id="side">
-    <div class="marca"><div class="logo">N</div><div><b>Navicam</b><span>Repuestos Rosario</span></div></div>
+    <div class="marca"><div class="logo">N</div><div style="flex:1"><b>Navicam</b><span>Repuestos Rosario</span></div><button class="btnAct" onclick="actualizarTodo(this)" title="Actualizar: trae los últimos cambios y la última versión de la app">↻</button></div>
     <button class="nav" data-v="inicio" onclick="ir('inicio')"><span class="ic">⌂</span>Inicio</button>
     <button class="nav" data-v="deposito" onclick="ir('deposito')"><span class="ic">🔍</span>Depósito</button>
     <button class="nav" data-v="sobre" onclick="ir('sobre')"><span class="ic">▤</span>Sobre stock</button>

@@ -156,6 +156,11 @@ table.t tr.sel td{background:#172744}
 }
 .evento:hover{background:#172744}
 
+.btnAct{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:15px;line-height:1;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:color .2s,border-color .2s}
+.btnAct:hover{color:var(--txt);border-color:var(--muted)}
+.btnAct.girando{animation:girar 1s linear infinite;pointer-events:none}
+@keyframes girar{to{transform:rotate(360deg)}}
+
 </style>
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
@@ -164,13 +169,13 @@ table.t tr.sel td{background:#172744}
 <body>
 <div id="carga">Cargando datos…</div>
 <div id="topMovil">
-  <button class="btn" onclick="menuMovil()">☰</button>
+  <span class="fila" style="gap:6px;flex-wrap:nowrap"><button class="btn" onclick="menuMovil()">☰</button><button class="btnAct" onclick="actualizarTodo(this)" title="Actualizar">↻</button></span>
   <b>Navicam</b>
   <span class="fila" style="gap:8px;flex-wrap:nowrap"><span id="syncMovil" title="Sincronización" style="width:9px;height:9px;border-radius:50%;background:var(--amber)"></span><span class="chip" id="dolarMovil" onclick="editarDolar()">USD —</span></span>
 </div>
 <div id="app">
   <aside id="side">
-    <div class="marca"><div class="logo">N</div><div><b>Navicam</b><span>Repuestos Rosario</span></div></div>
+    <div class="marca"><div class="logo">N</div><div style="flex:1"><b>Navicam</b><span>Repuestos Rosario</span></div><button class="btnAct" onclick="actualizarTodo(this)" title="Actualizar: trae los últimos cambios y la última versión de la app">↻</button></div>
     <button class="nav" data-v="inicio" onclick="ir('inicio')"><span class="ic">⌂</span>Inicio</button>
     <button class="nav" data-v="deposito" onclick="ir('deposito')"><span class="ic">🔍</span>Depósito</button>
     <button class="nav" data-v="sobre" onclick="ir('sobre')"><span class="ic">▤</span>Sobre stock</button>
@@ -185,7 +190,7 @@ table.t tr.sel td{background:#172744}
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-13 09:59</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-13 10:12</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -908,24 +913,28 @@ function elegirNexpro(i, k) { const b = B(); const l = b.items[i]; aplicarMarca(
 // --- reemplazos
 function formReemplazo(i) {
   const l = B().items[i]; const base = baseDe(l);
-  abrirModal(`<h3 style="margin-top:0">Reemplazo para ${esc(base.cod)}</h3>
-    <p class="muted">${esc(base.desc)}. Poné el código que lo reemplaza: el renglón toma la descripción, el precio, la D y el stock del código nuevo, y queda anotado que es un reemplazo. El programa lo recuerda para la próxima vez.</p>
-    <div class="fila"><input class="in" id="codReemp" autofocus style="max-width:220px" placeholder="Código nuevo" oninput="const a=infoArticulo(limpiarCodigo(this.value));document.getElementById('prevReemp').innerHTML=a.desc?esc(a.desc)+(a.usd?' · '+plata(a.usd*S.dolar)+' + IVA':'')+(a.stock!==null?' · stock '+esc(a.stock):''):'<span class=muted>No está en la lista ni en el stock</span>'" onkeydown="if(event.key==='Enter')ponerReemplazo(${i},this.value)">
-    <button class="btn pri" onclick="ponerReemplazo(${i},document.getElementById('codReemp').value)">Reemplazar</button><button class="btn" onclick="cerrarModal()">Cancelar</button></div>
-    <div id="prevReemp" style="margin-top:8px;font-size:13px"></div>`);
+  const prev = id => `const a=infoArticulo(limpiarCodigo(this.value));document.getElementById('${id}').innerHTML=a.desc?esc(a.desc)+(a.usd?' · '+plata(a.usd*S.dolar)+' + IVA':'')+(a.stock!==null?' · stock '+esc(a.stock):''):'<span class=muted>No está en la lista ni en el stock</span>'`;
+  abrirModal(`<h3 style="margin-top:0">Poner un reemplazo</h3>
+    <p class="muted" style="margin-top:0">El renglón toma la descripción, el precio, la D y el stock del código nuevo, y queda anotado que es un reemplazo. El programa lo recuerda para la próxima vez.</p>
+    <div class="campo"><span class="lbl">Código que pidió el cliente</span><input class="in" id="codPedido" style="max-width:220px" value="${esc(base.cod)}" oninput="${prev('prevPedido')}"><div id="prevPedido" style="font-size:12px;margin-top:3px">${esc(base.desc || '')}</div></div>
+    <div style="margin:6px 0"><button class="btn chico" title="Dar vuelta los dos códigos" onclick="const x=document.getElementById('codPedido'),y=document.getElementById('codReemp');[x.value,y.value]=[y.value,x.value];x.dispatchEvent(new Event('input'));y.dispatchEvent(new Event('input'))">⇅ dar vuelta</button></div>
+    <div class="campo"><span class="lbl">Código nuevo (el que va en el presupuesto)</span><input class="in" id="codReemp" autofocus style="max-width:220px" placeholder="Código nuevo" oninput="${prev('prevReemp')}" onkeydown="if(event.key==='Enter')ponerReemplazo(${i},this.value,document.getElementById('codPedido').value)"><div id="prevReemp" style="font-size:12px;margin-top:3px"></div></div>
+    <div class="fila" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="ponerReemplazo(${i},document.getElementById('codReemp').value,document.getElementById('codPedido').value)">Reemplazar</button></div>`);
 }
-function ponerReemplazo(i, nuevo) {
-  nuevo = limpiarCodigo(nuevo); if (nuevo.length < 2) return;
-  const b = B(); const l = b.items[i]; const viejo = l.reemplazaA || baseDe(l).cod;
-  if (nuevo === viejo) { aviso('Es el mismo código', 'err'); return; }
+async function ponerReemplazo(i, nuevo, pedido) {
+  nuevo = limpiarCodigo(nuevo); if (nuevo.length < 2) { aviso('Poné el código nuevo', 'err'); return; }
+  const b = B(); const l = b.items[i];
+  const viejo = pedido !== undefined && limpiarCodigo(pedido).length >= 2 ? limpiarCodigo(pedido) : (l.reemplazaA || baseDe(l).cod);
+  if (nuevo === viejo) { aviso('Los dos códigos son iguales', 'err'); return; }
   if (!S.precios[nuevo] && !stockIdx.has(nuevo) && !confirm(`${nuevo} no está en la lista ni en el stock. ¿Usarlo igual?`)) return;
   l.reemplazaA = viejo; l.base = datosIveco(nuevo);
   aplicarMarca(l); recalcDesc(l, cliente(b.clienteId)); calcularLinea(l, b.dolar);
-  if (S.reemplazos[viejo] !== nuevo) {
-    S.reemplazos[viejo] = nuevo; guardar('reemplazos');
-    docGuardar('reemplazos', { id: viejo, nuevo }, { tipo: 'Reemplazo', detalle: `${viejo} → ${nuevo}` });   // se comparte en segundo plano
-  }
-  guardar('borrador'); cerrarModal(); pintar(); aviso(`${viejo} reemplazado por ${nuevo}`, 'ok');
+  guardar('borrador'); cerrarModal(); pintar();
+  if (S.reemplazos[viejo] === nuevo) { aviso(`${viejo} reemplazado por ${nuevo}`, 'ok'); return; }
+  const r = await docGuardar('reemplazos', { id: viejo, nuevo }, { tipo: 'Reemplazo', detalle: `${viejo} → ${nuevo}` });
+  if (!r) { aviso(`El renglón quedó con ${nuevo}, pero el reemplazo no se pudo guardar en la planilla. Probá de nuevo desde Datos y ajustes.`, 'err'); return; }
+  S.reemplazos[viejo] = nuevo; guardar('reemplazos'); pintarSeguro();
+  aviso(`Reemplazo guardado: ${viejo} → ${nuevo}`, 'ok');
 }
 function quitarReemplazo(i) {
   const b = B(); const l = b.items[i];
@@ -2048,11 +2057,13 @@ function aplicarRespuesta(resp) {
   if (resp.resultado && resp.resultado.ubicaciones) { S.ubicCambios = resp.resultado.ubicaciones; guardar('ubicCambios'); }
 }
 // Envoltorio con aviso: devuelve la respuesta o null si falló (y avisa)
+let escribiendo = 0;   // mientras hay un guardado en camino no se baja nada, para no pisar lo recién cambiado
 async function remoto(op, textoEspera, ms) {
   const t = textoEspera ? avisoFijo(textoEspera) : null;
+  escribiendo++;
   try { return await enviarOp(op, ms); }
   catch (e) { aviso('❌ ' + e.message, 'err'); return null; }
-  finally { if (t) t.remove(); }
+  finally { escribiendo--; if (t) t.remove(); }
 }
 function avisoFijo(texto) { const d = document.createElement('div'); d.textContent = '⏳ ' + texto; document.getElementById('toast').appendChild(d); return d; }
 
@@ -2145,7 +2156,7 @@ function estadoSync(e) {
     + (planillaUrl ? ` · <a href="${esc(planillaUrl)}" target="_blank">planilla</a>` : '');
 }
 async function sincronizar(forzar) {
-  if (sincronizando) return; sincronizando = true;
+  if (sincronizando || escribiendo) return; sincronizando = true;
   let cambio = false;
   try {
     const d = await apiGet({ accion: 'estado' });
@@ -2208,7 +2219,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-13 09:59';
+const VERSION_APP = '2026-10-13 10:12';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));
@@ -2232,6 +2243,20 @@ async function revisarVersion() {
 async function actualizarApp() {
   try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.update())); } catch (e) {}
   location.reload();
+}
+// Botón ↻ de arriba a la izquierda: si hay versión nueva la carga; si no, trae los últimos cambios de la planilla
+async function actualizarTodo(btn) {
+  const botones = document.querySelectorAll('.btnAct'); botones.forEach(b => b.classList.add('girando'));
+  try {
+    if (SEGURO) {
+      try {
+        const v = (await (await fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })).text()).trim();
+        if (v && v !== VERSION_APP) { aviso('Cargando la versión nueva…', 'ok'); await actualizarApp(); return; }
+      } catch (e) {}
+    }
+    await sincronizar(); refrescarRegistro();
+    aviso('Todo al día', 'ok');
+  } finally { botones.forEach(b => b.classList.remove('girando')); }
 }
 setInterval(revisarVersion, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarVersion(); });
