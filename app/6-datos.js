@@ -34,8 +34,21 @@ VISTAS.datos = function () {
   </div>
   <div class="panel" style="margin-top:14px"><div class="fila" style="justify-content:space-between"><h3 style="margin:0">Registro de cambios</h3><button class="btn" onclick="ir('historial')">Ver el historial completo</button></div></div>`);
 };
+// Qué hay cargado hoy en la planilla (y de qué archivo vino, si se sabe)
+function resumenDatos(clave) {
+  const ult = S.archivos[clave] ? ' · último: ' + S.archivos[clave] : '';
+  if (clave === 'stock') return fmt(S.stock.length, 0) + ' artículos' + ult;
+  if (clave === 'precios') return fmt(Object.keys(S.precios).length, 0) + ' códigos' + ult;
+  if (clave === 'sobre') {
+    const r = S.registro.find(x => x.tipo === 'IMPORTACION');
+    return `${fmt(S.sobre.length, 0)} artículos en ${S.cajones.length} cajones` + (r ? ' · última importación: ' + (r.resultado && r.resultado.archivo ? r.resultado.archivo + ' · ' : '') + r.fecha : '');
+  }
+  if (clave === 'repos') return fmt(Object.keys(S.reposicionado).length, 0) + ' códigos' + ult;
+  if (clave === 'clientesXls') return S.clientes.length + ' clientes cargados' + ult;
+  return ult ? ult.slice(3) : 'Sin datos todavía';
+}
 function filaImport(txt, clave, fn) {
-  return `<div class="fila" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid #1c2740"><div><div>${txt}</div><div class="muted" style="font-size:12px">${S.archivos[clave] ? 'Último: ' + esc(S.archivos[clave]) : clave === 'clientesXls' ? S.clientes.length + ' clientes cargados' : 'Sin datos todavía'}</div></div>
+  return `<div class="fila" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid #1c2740"><div><div>${txt}</div><div class="muted" style="font-size:12px">${esc(resumenDatos(clave))}</div></div>
     <label class="btn">Elegir Excel<input type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="${fn}(event)"></label></div>`;
 }
 async function guardarAjustes() {
@@ -163,6 +176,7 @@ function impSobre(ev) {
     const r = await remoto({ tipo: 'importar', archivo: nombre, items }, 'Subiendo sobre stock…', 60000);
     if (!r) return;
     const res = r.resultado || {}; const cambios = (res.listaRepetidos || []).filter(x => x.cambio);
+    S.archivos.sobre = nombre + ' · ' + ahoraTxt(); guardar('archivos');
     abrirModal(`<h3 style="margin-top:0">Sobre stock importado</h3><p>${esc(nombre)}</p><ul><li>${res.agregados} artículos nuevos</li>${(res.cajonesNuevos || []).length ? `<li>${res.cajonesNuevos.length} cajones nuevos</li>` : ''}
       <li>${res.repetidos || 0} repetidos (ya estaban en el mismo cajón): ${(res.repetidos || 0) - (res.actualizados || 0)} sin diferencias, <b>${res.actualizados || 0} con diferencias → se tomó el Excel</b></li></ul>
       ${cambios.length ? `<div style="max-height:240px;overflow:auto;font-size:12px" class="muted">${cambios.map(x => `${esc(x.codigo)} (${esc(x.cajon)}): cant ${x.cantAnterior}→${x.cantNueva}` + (x.ubiAnterior !== x.ubiNueva ? `, ubic ${esc(x.ubiAnterior)}→${esc(x.ubiNueva)}` : '')).join('<br>')}</div>` : ''}
