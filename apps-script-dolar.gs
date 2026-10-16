@@ -104,22 +104,29 @@ function guardarGrande(clave, valor) {
 
 // ---------- planilla ----------
 let _ss = null;
+// La planilla de datos es SIEMPRE esta. Nunca se crea otra sola: si Google no responde, se reintenta y si no, da error
+// (antes, un corte de Google hacía que se creara una planilla vacía y la app quedaba sin datos).
+const PLANILLA_ID_FIJA = '11y0MPVc8g7r---kzNicDt8kyacip8ehUtvnxS1-sE58';
 function planilla() {
   if (_ss) return _ss;
   const p = props();
-  const id = p.getProperty('planilla_id');
-  if (id) { try { _ss = SpreadsheetApp.openById(id); return _ss; } catch (e) {} }
-  _ss = SpreadsheetApp.create(NOMBRE_PLANILLA);
-  p.setProperty('planilla_id', _ss.getId());
-  Object.keys(HOJAS).forEach(k => hoja(k));
-  const sobrante = _ss.getSheets().filter(h => Object.values(HOJAS).indexOf(h.getName()) === -1);
-  sobrante.forEach(h => { try { _ss.deleteSheet(h); } catch (e) {} });
-  try {
-    const it = DriveApp.getFoldersByName(CARPETA_DATOS);
-    const carpeta = it.hasNext() ? it.next() : DriveApp.createFolder(CARPETA_DATOS);
-    DriveApp.getFileById(_ss.getId()).moveTo(carpeta);
-  } catch (e) {}
+  const id = PLANILLA_ID_FIJA || p.getProperty('planilla_id');
+  let error = null;
+  for (let i = 0; i < 3 && !_ss; i++) {
+    try { _ss = SpreadsheetApp.openById(id); }
+    catch (e) { error = e; Utilities.sleep(1500 * (i + 1)); }
+  }
+  if (!_ss) throw new Error('Google no respondió al abrir la planilla de datos. Probá de nuevo en un momento. (' + error + ')');
+  if (p.getProperty('planilla_id') !== id) p.setProperty('planilla_id', id);
+  rescateUnaVez(p);
   return _ss;
+}
+// Después de volver a la planilla buena: subir todas las versiones para que cada dispositivo baje todo de nuevo
+function rescateUnaVez(p) {
+  if (p.getProperty('rescate_2026_10_16') === 'si') return;
+  p.setProperty('rescate_2026_10_16', 'si');
+  ['stock', 'precios', 'repos'].forEach(t => subirVersion(t, {}));
+  Object.keys(TABLAS).forEach(t => subirVersion('t_' + t, {}));
 }
 
 const _hojas = {};
