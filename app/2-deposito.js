@@ -87,7 +87,8 @@ function tarjetaArticulo(cod) {
 function etiquetasArticulo(a) {
   let s = '';
   if (a.repos) s += `<span class="tag t-amber" title="Mes del cambio: ${esc(a.reposMes)}">Reposicionado${a.reposMes ? ' · ' + esc(a.reposMes) : ''}</span>`;
-  if (!a.enLista) s += `<span class="tag t-red">No está en la lista</span>`;
+  if (a.propio) s += `<span class="tag t-violet">Artículo propio${a.tipo ? ' · ' + esc(a.tipo) : ''}</span>`;
+  else if (!a.enLista) s += `<span class="tag t-red">No está en la lista</span>`;
   return s;
 }
 async function cambiarUbicacion(cod, idInput, idNota) {

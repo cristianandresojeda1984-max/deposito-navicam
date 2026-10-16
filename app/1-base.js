@@ -36,10 +36,10 @@ function dbBorrarTodo() {
 
 // ============ Estado ============
 const CLAVES = ['dolar', 'stock', 'precios', 'sobre', 'cajones', 'notas', 'ubicCambios', 'reposicionado', 'pedidoNegocio', 'promos',
-  'clientes', 'presupuestos', 'motivos', 'registro', 'ajustes', 'contador', 'borrador', 'archivos', 'agenda', 'avisados', 'versionDatos', 'nexpro', 'reemplazos', 'metas'];
+  'clientes', 'presupuestos', 'motivos', 'registro', 'ajustes', 'contador', 'borrador', 'archivos', 'agenda', 'avisados', 'versionDatos', 'nexpro', 'reemplazos', 'metas', 'propios'];
 const S = {
   dolar: 1520, stock: [], precios: {}, sobre: [], cajones: [], notas: {}, ubicCambios: {}, reposicionado: {}, pedidoNegocio: {}, promos: {},
-  clientes: [], presupuestos: [], motivos: [], registro: [], ajustes: {}, contador: 0, borrador: null, archivos: {}, agenda: [], avisados: {}, versionDatos: 1, nexpro: {}, reemplazos: {}, metas: {}
+  clientes: [], presupuestos: [], motivos: [], registro: [], ajustes: {}, contador: 0, borrador: null, archivos: {}, agenda: [], avisados: {}, versionDatos: 1, nexpro: {}, reemplazos: {}, metas: {}, propios: {}
 };
 const MOTIVOS_BASE = ['Precio', 'Plazo de entrega', 'Sin stock', 'Lo compró en otro lado', 'Otro'];
 const CATEGORIAS = [
@@ -91,7 +91,8 @@ function limpiarCodigo(v) {
   if (/^\d+\.0+$/.test(s)) s = s.split('.')[0];
   return s;
 }
-function marcaDe(l) { const m = l.marca || 'IVECO'; return m === 'OTRO' ? (l.marcaTxt || 'OTRA MARCA') : m; }
+function marcaDe(l) { const m = l.marca || 'IVECO'; return m === 'OTRO' ? (l.marcaTxt || 'OTRA MARCA') : m === 'PROPIO' ? (l.marcaTxt || '—') : m; }
+function existeArticulo(cod) { return !!(S.precios[cod] || stockIdx.has(cod) || S.propios[cod]); }
 function numPresu(p) { return p.num ? String(p.num).padStart(4, '0') : '(pend.)'; }
 
 // El registro de cambios lo lleva el servidor (hoja Registro de la planilla)
@@ -170,6 +171,11 @@ function infoArticulo(cod) {
   const p = S.precios[cod];
   const st = stockIdx.get(cod);
   const sob = sobreIdx.get(cod) || [];
+  // Artículo propio (no es de Iveco): lo cargaron ellos, con precio en pesos
+  const pr = !p && !st ? S.propios[cod] : null;
+  if (pr) return { cod, desc: pr.desc || '', usd: 0, D: '', enLista: false, propio: true, precioArs: Number(pr.precio) || 0, tipo: pr.tipo || '',
+    stock: pr.stock === null || pr.stock === undefined || pr.stock === '' ? null : pr.stock, ubic: pr.ubic || '-',
+    sobre: sob.reduce((a, x) => a + (x.cant || 0), 0), sobreDet: sob, repos: false, reposMes: '' };
   return {
     cod,
     desc: (st && st[1]) || (p && p[1]) || '',
@@ -190,7 +196,10 @@ function buscarArticulos(q, max = 12) {
   const qU = q.toUpperCase();
   const out = []; const vistos = new Set();
   const agregar = c => { if (!vistos.has(c)) { vistos.add(c); out.push(c); } };
-  if (S.precios[qU] || stockIdx.has(qU)) agregar(qU);
+  if (S.precios[qU] || stockIdx.has(qU) || S.propios[qU]) agregar(qU);
+  // artículos propios (son pocos: se buscan primero por código y por descripción)
+  const palabrasP = q.split(/\s+/).filter(Boolean);
+  for (const c in S.propios) { if (out.length >= max) break; const t = normalizar(c + ' ' + (S.propios[c].desc || '')); if (c.startsWith(qU) || palabrasP.every(x => t.includes(x))) agregar(c); }
   // prefijo de código
   for (const r of S.stock) { if (out.length >= max) break; if (r[0].startsWith(qU)) agregar(r[0]); }
   if (out.length < max) for (const c in S.precios) { if (out.length >= max) break; if (c.startsWith(qU)) agregar(c); }

@@ -46,7 +46,7 @@ VISTAS.cotizador = function () {
         <input class="in" id="busq" autocomplete="off" placeholder="Ej: 2992242 o filtro aceite" oninput="sugerir(this.value)" onkeydown="teclaBusq(event)"><div class="sug" id="sug" style="display:none"></div></div>
       <div class="campo" style="width:90px"><span class="lbl">Cantidad</span><input class="in" id="cantNueva" type="number" min="1" value="1" onkeydown="if(event.key==='Enter')agregarDesdeBuscador()"></div>
       <button class="btn pri" onclick="agregarDesdeBuscador()">Agregar</button>
-      <button class="btn" onclick="formPegar()">Pegar lista desde Excel</button>
+      <button class="btn azul" onclick="formPegar()">Pegar códigos y cantidades</button>
       <button class="btn" onclick="formCopiarAnterior()">Copiar de un presupuesto anterior</button>
     </div>
     <div class="tabla-scroll" style="margin-top:14px">${tablaBorrador(b, cli)}</div>
@@ -74,17 +74,17 @@ function tablaBorrador(b, cli) {
     const base = baseDe(l);
     const nx = S.nexpro[base.cod] || [];
     const sugerido = !l.reemplazaA && S.reemplazos[base.cod];
-    const precioEditable = marca === 'OTRO' || (!l.usd && !l.listaManual) || (marca === 'NEXPRO' && !l.usd);
+    const precioEditable = marca === 'OTRO' || marca === 'PROPIO' || (!l.usd && !l.listaManual) || (marca === 'NEXPRO' && !l.usd);
     return `<tr>
       <td style="min-width:230px"><span class="num" style="color:var(--amber);font-weight:600">${esc(l.cod)}</span>${marca === 'NEXPRO' && l.cod !== base.cod ? ` <span class="muted" style="font-size:11px">(Iveco ${esc(base.cod)})</span>` : ''}
         <div style="font-size:13px">${esc(l.desc)}</div>
         ${l.reemplazaA ? `<div><span class="tag t-violet">Reemplaza a ${esc(l.reemplazaA)}</span> <a href="#" style="font-size:11px" onclick="quitarReemplazo(${i});return false">quitar</a></div>`
           : sugerido ? `<div><span class="tag t-amber">Tiene reemplazo: ${esc(sugerido)}</span> <button class="btn chico azul" onclick="ponerReemplazo(${i},'${esc(sugerido)}')">Usar</button></div>`
           : `<a href="#" style="font-size:11px" onclick="formReemplazo(${i});return false">↔ poner reemplazo</a>`}</td>
-      <td><select class="in" style="width:104px;padding:5px 6px" onchange="cambiarMarca(${i},this.value)">${['IVECO', 'NEXPRO', 'OTRO'].map(m => `<option ${m === marca ? 'selected' : ''}>${m}</option>`).join('')}</select>
+      <td>${marca === 'PROPIO' ? `<span class="tag t-violet">Artículo propio</span><input class="in" style="width:104px;padding:4px 6px;margin-top:4px;font-size:12px" placeholder="Marca (opcional)" title="Lo que sale en la columna Marca del presupuesto" value="${esc(l.marcaTxt || '')}" onchange="B().items[${i}].marcaTxt=this.value.trim().toUpperCase();guardar('borrador')">` : `<select class="in" style="width:104px;padding:5px 6px" onchange="cambiarMarca(${i},this.value)">${['IVECO', 'NEXPRO', 'OTRO'].map(m => `<option ${m === marca ? 'selected' : ''}>${m}</option>`).join('')}</select>
         ${marca === 'OTRO' ? `<input class="in" style="width:104px;padding:4px 6px;margin-top:4px;font-size:12px" placeholder="¿Qué marca?" value="${esc(l.marcaTxt || '')}" onchange="B().items[${i}].marcaTxt=this.value.trim().toUpperCase();guardar('borrador')">` : ''}
         ${marca === 'NEXPRO' && nx.length > 1 ? `<select class="in" style="width:104px;padding:4px 6px;margin-top:4px;font-size:11px" title="Hay ${nx.length} equivalentes NEXPRO" onchange="elegirNexpro(${i},this.value)">${nx.map((x, k) => `<option value="${k}" ${x[0] === l.cod ? 'selected' : ''} title="${esc(x[4])}">${esc(x[0])}</option>`).join('')}</select>` : ''}
-        ${marca === 'NEXPRO' && !nx.length ? '<div class="tag t-red" style="white-space:normal;margin-top:4px">Sin equivalente: precio a mano</div>' : ''}</td>
+        ${marca === 'NEXPRO' && !nx.length ? '<div class="tag t-red" style="white-space:normal;margin-top:4px">Sin equivalente: precio a mano</div>' : ''}`}</td>
       <td class="der"><input class="in" type="number" min="1" value="${l.cant}" style="width:66px;text-align:right" onchange="cambiarCant(${i},this.value)"></td>
       <td class="cen">${esc(l.D || '—')}</td>
       <td class="der num">${precioEditable ? `<input class="in" placeholder="$ a mano" style="width:110px;text-align:right" value="${l.listaManual ? fmt(l.listaManual) : ''}" onchange="ponerListaManual(${i},this.value)">` : plata(l.listaArs)}</td>
@@ -104,13 +104,15 @@ function datosIveco(cod) { const a = infoArticulo(cod); return { cod, desc: a.de
 function lineaNueva(cod, cant, cli, dolar) {
   const a = infoArticulo(cod);
   const dc = descCliente(cli, a.D);
+  if (a.propio) return calcularLinea({ cod, desc: a.desc, cant, D: '', usd: 0, listaManual: a.precioArs, descPct: 0, manual: false, marca: 'PROPIO', base: datosIveco(cod) }, dolar);
   return calcularLinea({ cod, desc: a.desc, cant, D: a.D, usd: a.usd, listaManual: 0, descPct: dc.pct, manual: false, marca: 'IVECO', base: datosIveco(cod) }, dolar);
 }
 // Aplica la marca elegida sobre los datos Iveco del renglón
 function aplicarMarca(l, idxNexpro) {
   const base = baseDe(l); l.base = base;
   const m = l.marca || 'IVECO';
-  if (m === 'IVECO') { Object.assign(l, { cod: base.cod, desc: base.desc, usd: base.usd, D: base.D, listaManual: 0 }); }
+  if (m === 'PROPIO') { const pr = S.propios[base.cod]; Object.assign(l, { cod: base.cod, desc: base.desc, usd: 0, D: '' }); if (pr && !l.listaManual) l.listaManual = Number(pr.precio) || 0; }
+  else if (m === 'IVECO') { Object.assign(l, { cod: base.cod, desc: base.desc, usd: base.usd, D: base.D, listaManual: 0 }); }
   else if (m === 'NEXPRO') {
     const nx = S.nexpro[base.cod] || [];
     const x = nx[idxNexpro || 0];
@@ -143,7 +145,7 @@ async function ponerReemplazo(i, nuevo, pedido) {
   const b = B(); const l = b.items[i];
   const viejo = pedido !== undefined && limpiarCodigo(pedido).length >= 2 ? limpiarCodigo(pedido) : (l.reemplazaA || baseDe(l).cod);
   if (nuevo === viejo) { aviso('Los dos códigos son iguales', 'err'); return; }
-  if (!S.precios[nuevo] && !stockIdx.has(nuevo) && !confirm(`${nuevo} no está en la lista ni en el stock. ¿Usarlo igual?`)) return;
+  if (!existeArticulo(nuevo) && !confirm(`${nuevo} no está en la lista ni en el stock. ¿Usarlo igual?`)) return;
   l.reemplazaA = viejo; l.base = datosIveco(nuevo);
   aplicarMarca(l); recalcDesc(l, cliente(b.clienteId)); calcularLinea(l, b.dolar);
   guardar('borrador'); cerrarModal(); pintar();
@@ -161,6 +163,7 @@ function quitarReemplazo(i) {
 // Refresca precios de un renglón con la lista de hoy, respetando marca y reemplazo
 function refrescarLinea(l, cli, dolar) {
   const base = baseDe(l); const a = infoArticulo(base.cod);
+  if (l.marca === 'PROPIO') { if (a.propio && a.precioArs) l.listaManual = a.precioArs; calcularLinea(l, dolar); return; }
   if (a.usd) l.base = { ...base, usd: a.usd, D: a.D, desc: a.desc || base.desc };
   const nxIdx = (S.nexpro[l.base.cod] || []).findIndex(x => x[0] === l.cod);
   if ((l.marca || 'IVECO') !== 'OTRO') aplicarMarca(l, Math.max(0, nxIdx));
@@ -189,7 +192,11 @@ function ponerDesc(i, v) {
 }
 function volverEscala(i) { const b = B(); const l = b.items[i]; l.descPct = descCliente(cliente(b.clienteId), l.D).pct; l.manual = false; calcularLinea(l, b.dolar); guardar('borrador'); pintar(); }
 function leerPesos(v) { let t = String(v).trim().replace(/[$\s]/g, ''); if (/,\d{1,2}$/.test(t) || (t.includes(',') && t.includes('.'))) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(',', '.'); return parseFloat(t) || 0; }
-function ponerListaManual(i, v) { const b = B(); b.items[i].listaManual = leerPesos(v); calcularLinea(b.items[i], b.dolar); guardar('borrador'); pintar(); }
+function ponerListaManual(i, v) {
+  const b = B(); const l = b.items[i]; l.listaManual = leerPesos(v); calcularLinea(l, b.dolar); guardar('borrador'); pintar();
+  // en un artículo propio, el precio que se pone queda como precio del artículo
+  if (l.marca === 'PROPIO' && S.propios[l.cod] && l.listaManual && Number(S.propios[l.cod].precio) !== l.listaManual) guardarPrecioPropio(l.cod, l.listaManual);
+}
 function quitarLinea(i) { const b = B(); const l = b.items.splice(i, 1)[0]; guardar('borrador'); pintar(); if (l) aviso(`Se quitó ${l.cod} del presupuesto`, 'ok'); }
 function actualizarPreciosBorrador() {
   const b = B(); b.dolar = S.dolar; const cli = cliente(b.clienteId);
@@ -206,7 +213,7 @@ function sugerir(v) {
   sugLista = buscarArticulos(v, 12); sugAct = sugLista.length ? 0 : -1;
   const el = document.getElementById('sug');
   if (!sugLista.length) { el.style.display = 'none'; return; }
-  el.innerHTML = sugLista.map((c, i) => { const a = infoArticulo(c); return `<div class="${i === sugAct ? 'act' : ''}" onmousedown="elegirSug(${i})"><span class="mono">${esc(c)}</span><span>${esc(a.desc)}</span><span class="muted" style="margin-left:auto">${a.usd ? plata(a.usd * S.dolar) + ' + IVA' : ''}</span></div>`; }).join('');
+  el.innerHTML = sugLista.map((c, i) => { const a = infoArticulo(c); return `<div class="${i === sugAct ? 'act' : ''}" onmousedown="elegirSug(${i})"><span class="mono">${esc(c)}</span><span>${esc(a.desc)}</span><span class="muted" style="margin-left:auto">${a.usd ? plata(a.usd * S.dolar) + ' + IVA' : a.propio ? (a.precioArs ? plata(a.precioArs) + ' + IVA' : 'propio · sin precio') : ''}</span></div>`; }).join('');
   el.style.display = 'block';
 }
 function cerrarSug() { const el = document.getElementById('sug'); if (el) el.style.display = 'none'; }
@@ -224,40 +231,14 @@ function agregarDesdeBuscador() {
   const v = limpiarCodigo(document.getElementById('busq').value);
   if (v.length < 2) return;
   let cod = v;
-  if (!S.precios[cod] && !stockIdx.has(cod)) {
+  const cant = parseInt(document.getElementById('cantNueva').value) || 1;
+  if (!existeArticulo(cod)) {
     const r = buscarArticulos(v, 1);
     if (r.length) cod = r[0];
-    else if (!confirm(`El código ${v} no está en la lista ni en el stock. ¿Agregarlo igual (con precio a mano)?`)) return;
+    else { formArticulo({ id: v }, { cant }); return; }
   }
-  const cant = parseInt(document.getElementById('cantNueva').value) || 1;
   agregarAlBorrador(cod, cant);
   setTimeout(() => { const i = document.getElementById('busq'); if (i) { i.value = ''; i.focus(); } }, 0);
-}
-// --- pegar lista
-function formPegar() {
-  abrirModal(`<h3 style="margin-top:0">Pegar lista desde Excel</h3>
-  <p class="muted">Copiá en Excel las columnas de cantidad y código (en cualquier orden, puede venir también la descripción) y pegalas acá. Una fila por artículo.</p>
-  <textarea class="in" id="txtPegar" rows="10" autofocus placeholder="12	500354584	bulones&#10;1	504006261	tensor"></textarea>
-  <div class="fila" style="margin-top:12px"><button class="btn pri" onclick="procesarPegado()">Agregar al presupuesto</button><button class="btn" onclick="cerrarModal()">Cancelar</button></div>`);
-}
-function procesarPegado() {
-  const filas = document.getElementById('txtPegar').value.split(/\r?\n/).map(f => f.trim()).filter(Boolean);
-  let ok = 0; const raros = [];
-  filas.forEach(f => {
-    const t = f.split(/\t|;|\s{2,}|,(?=\s*\d)/).map(x => x.trim()).filter(Boolean);
-    let cod = '', cant = 1;
-    const esCant = x => /^\d{1,4}([.,]0+)?$/.test(x);
-    let idxCod = t.findIndex(x => !esCant(x) && (S.precios[limpiarCodigo(x)] || stockIdx.has(limpiarCodigo(x))));
-    if (idxCod < 0) idxCod = t.findIndex(x => S.precios[limpiarCodigo(x)] || stockIdx.has(limpiarCodigo(x)));
-    if (idxCod >= 0) cod = limpiarCodigo(t[idxCod]);
-    else { const cand = t.find(x => /^\d{5,}[A-Z]?$/i.test(limpiarCodigo(x))); if (cand) cod = limpiarCodigo(cand); }
-    const nq = t.find((x, i) => i !== idxCod && /^\d{1,4}([.,]0+)?$/.test(x));
-    if (nq) cant = parseInt(nq);
-    if (cod) { agregarSinPintar(cod, cant); ok++; if (!S.precios[cod]) raros.push(cod); }
-    else raros.push(f);
-  });
-  guardar('borrador'); cerrarModal(); pintar();
-  aviso(`${ok} artículos agregados.` + (raros.length ? `\nSin precio o sin reconocer: ${raros.slice(0, 8).join(', ')}${raros.length > 8 ? '…' : ''}` : ''), raros.length ? '' : 'ok');
 }
 function agregarSinPintar(cod, cant) {
   const b = B(); const ya = b.items.find(l => l.cod === cod || baseDe(l).cod === cod || l.reemplazaA === cod);

@@ -179,6 +179,7 @@ table.t tr.sel td{background:#172744}
     <button class="nav" data-v="inicio" onclick="ir('inicio')"><span class="ic">⌂</span>Inicio</button>
     <button class="nav" data-v="deposito" onclick="ir('deposito')"><span class="ic">🔍</span>Depósito</button>
     <button class="nav" data-v="sobre" onclick="ir('sobre')"><span class="ic">▤</span>Sobre stock</button>
+    <button class="nav" data-v="articulos" onclick="ir('articulos')"><span class="ic">✚</span>Artículos propios</button>
     <button class="nav" data-v="cotizador" onclick="ir('cotizador')"><span class="ic">＄</span>Cotizador</button>
     <button class="nav" data-v="presupuestos" onclick="ir('presupuestos')"><span class="ic">☰</span>Presupuestos</button>
     <button class="nav" data-v="metricas" onclick="ir('metricas')"><span class="ic">▥</span>Métricas</button>
@@ -190,7 +191,7 @@ table.t tr.sel td{background:#172744}
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-16 09:09</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-16 10:01</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -237,10 +238,10 @@ function dbBorrarTodo() {
 
 // ============ Estado ============
 const CLAVES = ['dolar', 'stock', 'precios', 'sobre', 'cajones', 'notas', 'ubicCambios', 'reposicionado', 'pedidoNegocio', 'promos',
-  'clientes', 'presupuestos', 'motivos', 'registro', 'ajustes', 'contador', 'borrador', 'archivos', 'agenda', 'avisados', 'versionDatos', 'nexpro', 'reemplazos', 'metas'];
+  'clientes', 'presupuestos', 'motivos', 'registro', 'ajustes', 'contador', 'borrador', 'archivos', 'agenda', 'avisados', 'versionDatos', 'nexpro', 'reemplazos', 'metas', 'propios'];
 const S = {
   dolar: 1520, stock: [], precios: {}, sobre: [], cajones: [], notas: {}, ubicCambios: {}, reposicionado: {}, pedidoNegocio: {}, promos: {},
-  clientes: [], presupuestos: [], motivos: [], registro: [], ajustes: {}, contador: 0, borrador: null, archivos: {}, agenda: [], avisados: {}, versionDatos: 1, nexpro: {}, reemplazos: {}, metas: {}
+  clientes: [], presupuestos: [], motivos: [], registro: [], ajustes: {}, contador: 0, borrador: null, archivos: {}, agenda: [], avisados: {}, versionDatos: 1, nexpro: {}, reemplazos: {}, metas: {}, propios: {}
 };
 const MOTIVOS_BASE = ['Precio', 'Plazo de entrega', 'Sin stock', 'Lo compró en otro lado', 'Otro'];
 const CATEGORIAS = [
@@ -292,7 +293,8 @@ function limpiarCodigo(v) {
   if (/^\d+\.0+$/.test(s)) s = s.split('.')[0];
   return s;
 }
-function marcaDe(l) { const m = l.marca || 'IVECO'; return m === 'OTRO' ? (l.marcaTxt || 'OTRA MARCA') : m; }
+function marcaDe(l) { const m = l.marca || 'IVECO'; return m === 'OTRO' ? (l.marcaTxt || 'OTRA MARCA') : m === 'PROPIO' ? (l.marcaTxt || '—') : m; }
+function existeArticulo(cod) { return !!(S.precios[cod] || stockIdx.has(cod) || S.propios[cod]); }
 function numPresu(p) { return p.num ? String(p.num).padStart(4, '0') : '(pend.)'; }
 
 // El registro de cambios lo lleva el servidor (hoja Registro de la planilla)
@@ -371,6 +373,11 @@ function infoArticulo(cod) {
   const p = S.precios[cod];
   const st = stockIdx.get(cod);
   const sob = sobreIdx.get(cod) || [];
+  // Artículo propio (no es de Iveco): lo cargaron ellos, con precio en pesos
+  const pr = !p && !st ? S.propios[cod] : null;
+  if (pr) return { cod, desc: pr.desc || '', usd: 0, D: '', enLista: false, propio: true, precioArs: Number(pr.precio) || 0, tipo: pr.tipo || '',
+    stock: pr.stock === null || pr.stock === undefined || pr.stock === '' ? null : pr.stock, ubic: pr.ubic || '-',
+    sobre: sob.reduce((a, x) => a + (x.cant || 0), 0), sobreDet: sob, repos: false, reposMes: '' };
   return {
     cod,
     desc: (st && st[1]) || (p && p[1]) || '',
@@ -391,7 +398,10 @@ function buscarArticulos(q, max = 12) {
   const qU = q.toUpperCase();
   const out = []; const vistos = new Set();
   const agregar = c => { if (!vistos.has(c)) { vistos.add(c); out.push(c); } };
-  if (S.precios[qU] || stockIdx.has(qU)) agregar(qU);
+  if (S.precios[qU] || stockIdx.has(qU) || S.propios[qU]) agregar(qU);
+  // artículos propios (son pocos: se buscan primero por código y por descripción)
+  const palabrasP = q.split(/\s+/).filter(Boolean);
+  for (const c in S.propios) { if (out.length >= max) break; const t = normalizar(c + ' ' + (S.propios[c].desc || '')); if (c.startsWith(qU) || palabrasP.every(x => t.includes(x))) agregar(c); }
   // prefijo de código
   for (const r of S.stock) { if (out.length >= max) break; if (r[0].startsWith(qU)) agregar(r[0]); }
   if (out.length < max) for (const c in S.precios) { if (out.length >= max) break; if (c.startsWith(qU)) agregar(c); }
@@ -567,7 +577,8 @@ function tarjetaArticulo(cod) {
 function etiquetasArticulo(a) {
   let s = '';
   if (a.repos) s += `<span class="tag t-amber" title="Mes del cambio: ${esc(a.reposMes)}">Reposicionado${a.reposMes ? ' · ' + esc(a.reposMes) : ''}</span>`;
-  if (!a.enLista) s += `<span class="tag t-red">No está en la lista</span>`;
+  if (a.propio) s += `<span class="tag t-violet">Artículo propio${a.tipo ? ' · ' + esc(a.tipo) : ''}</span>`;
+  else if (!a.enLista) s += `<span class="tag t-red">No está en la lista</span>`;
   return s;
 }
 async function cambiarUbicacion(cod, idInput, idNota) {
@@ -829,7 +840,7 @@ VISTAS.cotizador = function () {
         <input class="in" id="busq" autocomplete="off" placeholder="Ej: 2992242 o filtro aceite" oninput="sugerir(this.value)" onkeydown="teclaBusq(event)"><div class="sug" id="sug" style="display:none"></div></div>
       <div class="campo" style="width:90px"><span class="lbl">Cantidad</span><input class="in" id="cantNueva" type="number" min="1" value="1" onkeydown="if(event.key==='Enter')agregarDesdeBuscador()"></div>
       <button class="btn pri" onclick="agregarDesdeBuscador()">Agregar</button>
-      <button class="btn" onclick="formPegar()">Pegar lista desde Excel</button>
+      <button class="btn azul" onclick="formPegar()">Pegar códigos y cantidades</button>
       <button class="btn" onclick="formCopiarAnterior()">Copiar de un presupuesto anterior</button>
     </div>
     <div class="tabla-scroll" style="margin-top:14px">${tablaBorrador(b, cli)}</div>
@@ -857,17 +868,17 @@ function tablaBorrador(b, cli) {
     const base = baseDe(l);
     const nx = S.nexpro[base.cod] || [];
     const sugerido = !l.reemplazaA && S.reemplazos[base.cod];
-    const precioEditable = marca === 'OTRO' || (!l.usd && !l.listaManual) || (marca === 'NEXPRO' && !l.usd);
+    const precioEditable = marca === 'OTRO' || marca === 'PROPIO' || (!l.usd && !l.listaManual) || (marca === 'NEXPRO' && !l.usd);
     return `<tr>
       <td style="min-width:230px"><span class="num" style="color:var(--amber);font-weight:600">${esc(l.cod)}</span>${marca === 'NEXPRO' && l.cod !== base.cod ? ` <span class="muted" style="font-size:11px">(Iveco ${esc(base.cod)})</span>` : ''}
         <div style="font-size:13px">${esc(l.desc)}</div>
         ${l.reemplazaA ? `<div><span class="tag t-violet">Reemplaza a ${esc(l.reemplazaA)}</span> <a href="#" style="font-size:11px" onclick="quitarReemplazo(${i});return false">quitar</a></div>`
           : sugerido ? `<div><span class="tag t-amber">Tiene reemplazo: ${esc(sugerido)}</span> <button class="btn chico azul" onclick="ponerReemplazo(${i},'${esc(sugerido)}')">Usar</button></div>`
           : `<a href="#" style="font-size:11px" onclick="formReemplazo(${i});return false">↔ poner reemplazo</a>`}</td>
-      <td><select class="in" style="width:104px;padding:5px 6px" onchange="cambiarMarca(${i},this.value)">${['IVECO', 'NEXPRO', 'OTRO'].map(m => `<option ${m === marca ? 'selected' : ''}>${m}</option>`).join('')}</select>
+      <td>${marca === 'PROPIO' ? `<span class="tag t-violet">Artículo propio</span><input class="in" style="width:104px;padding:4px 6px;margin-top:4px;font-size:12px" placeholder="Marca (opcional)" title="Lo que sale en la columna Marca del presupuesto" value="${esc(l.marcaTxt || '')}" onchange="B().items[${i}].marcaTxt=this.value.trim().toUpperCase();guardar('borrador')">` : `<select class="in" style="width:104px;padding:5px 6px" onchange="cambiarMarca(${i},this.value)">${['IVECO', 'NEXPRO', 'OTRO'].map(m => `<option ${m === marca ? 'selected' : ''}>${m}</option>`).join('')}</select>
         ${marca === 'OTRO' ? `<input class="in" style="width:104px;padding:4px 6px;margin-top:4px;font-size:12px" placeholder="¿Qué marca?" value="${esc(l.marcaTxt || '')}" onchange="B().items[${i}].marcaTxt=this.value.trim().toUpperCase();guardar('borrador')">` : ''}
         ${marca === 'NEXPRO' && nx.length > 1 ? `<select class="in" style="width:104px;padding:4px 6px;margin-top:4px;font-size:11px" title="Hay ${nx.length} equivalentes NEXPRO" onchange="elegirNexpro(${i},this.value)">${nx.map((x, k) => `<option value="${k}" ${x[0] === l.cod ? 'selected' : ''} title="${esc(x[4])}">${esc(x[0])}</option>`).join('')}</select>` : ''}
-        ${marca === 'NEXPRO' && !nx.length ? '<div class="tag t-red" style="white-space:normal;margin-top:4px">Sin equivalente: precio a mano</div>' : ''}</td>
+        ${marca === 'NEXPRO' && !nx.length ? '<div class="tag t-red" style="white-space:normal;margin-top:4px">Sin equivalente: precio a mano</div>' : ''}`}</td>
       <td class="der"><input class="in" type="number" min="1" value="${l.cant}" style="width:66px;text-align:right" onchange="cambiarCant(${i},this.value)"></td>
       <td class="cen">${esc(l.D || '—')}</td>
       <td class="der num">${precioEditable ? `<input class="in" placeholder="$ a mano" style="width:110px;text-align:right" value="${l.listaManual ? fmt(l.listaManual) : ''}" onchange="ponerListaManual(${i},this.value)">` : plata(l.listaArs)}</td>
@@ -887,13 +898,15 @@ function datosIveco(cod) { const a = infoArticulo(cod); return { cod, desc: a.de
 function lineaNueva(cod, cant, cli, dolar) {
   const a = infoArticulo(cod);
   const dc = descCliente(cli, a.D);
+  if (a.propio) return calcularLinea({ cod, desc: a.desc, cant, D: '', usd: 0, listaManual: a.precioArs, descPct: 0, manual: false, marca: 'PROPIO', base: datosIveco(cod) }, dolar);
   return calcularLinea({ cod, desc: a.desc, cant, D: a.D, usd: a.usd, listaManual: 0, descPct: dc.pct, manual: false, marca: 'IVECO', base: datosIveco(cod) }, dolar);
 }
 // Aplica la marca elegida sobre los datos Iveco del renglón
 function aplicarMarca(l, idxNexpro) {
   const base = baseDe(l); l.base = base;
   const m = l.marca || 'IVECO';
-  if (m === 'IVECO') { Object.assign(l, { cod: base.cod, desc: base.desc, usd: base.usd, D: base.D, listaManual: 0 }); }
+  if (m === 'PROPIO') { const pr = S.propios[base.cod]; Object.assign(l, { cod: base.cod, desc: base.desc, usd: 0, D: '' }); if (pr && !l.listaManual) l.listaManual = Number(pr.precio) || 0; }
+  else if (m === 'IVECO') { Object.assign(l, { cod: base.cod, desc: base.desc, usd: base.usd, D: base.D, listaManual: 0 }); }
   else if (m === 'NEXPRO') {
     const nx = S.nexpro[base.cod] || [];
     const x = nx[idxNexpro || 0];
@@ -926,7 +939,7 @@ async function ponerReemplazo(i, nuevo, pedido) {
   const b = B(); const l = b.items[i];
   const viejo = pedido !== undefined && limpiarCodigo(pedido).length >= 2 ? limpiarCodigo(pedido) : (l.reemplazaA || baseDe(l).cod);
   if (nuevo === viejo) { aviso('Los dos códigos son iguales', 'err'); return; }
-  if (!S.precios[nuevo] && !stockIdx.has(nuevo) && !confirm(`${nuevo} no está en la lista ni en el stock. ¿Usarlo igual?`)) return;
+  if (!existeArticulo(nuevo) && !confirm(`${nuevo} no está en la lista ni en el stock. ¿Usarlo igual?`)) return;
   l.reemplazaA = viejo; l.base = datosIveco(nuevo);
   aplicarMarca(l); recalcDesc(l, cliente(b.clienteId)); calcularLinea(l, b.dolar);
   guardar('borrador'); cerrarModal(); pintar();
@@ -944,6 +957,7 @@ function quitarReemplazo(i) {
 // Refresca precios de un renglón con la lista de hoy, respetando marca y reemplazo
 function refrescarLinea(l, cli, dolar) {
   const base = baseDe(l); const a = infoArticulo(base.cod);
+  if (l.marca === 'PROPIO') { if (a.propio && a.precioArs) l.listaManual = a.precioArs; calcularLinea(l, dolar); return; }
   if (a.usd) l.base = { ...base, usd: a.usd, D: a.D, desc: a.desc || base.desc };
   const nxIdx = (S.nexpro[l.base.cod] || []).findIndex(x => x[0] === l.cod);
   if ((l.marca || 'IVECO') !== 'OTRO') aplicarMarca(l, Math.max(0, nxIdx));
@@ -972,7 +986,11 @@ function ponerDesc(i, v) {
 }
 function volverEscala(i) { const b = B(); const l = b.items[i]; l.descPct = descCliente(cliente(b.clienteId), l.D).pct; l.manual = false; calcularLinea(l, b.dolar); guardar('borrador'); pintar(); }
 function leerPesos(v) { let t = String(v).trim().replace(/[$\s]/g, ''); if (/,\d{1,2}$/.test(t) || (t.includes(',') && t.includes('.'))) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(',', '.'); return parseFloat(t) || 0; }
-function ponerListaManual(i, v) { const b = B(); b.items[i].listaManual = leerPesos(v); calcularLinea(b.items[i], b.dolar); guardar('borrador'); pintar(); }
+function ponerListaManual(i, v) {
+  const b = B(); const l = b.items[i]; l.listaManual = leerPesos(v); calcularLinea(l, b.dolar); guardar('borrador'); pintar();
+  // en un artículo propio, el precio que se pone queda como precio del artículo
+  if (l.marca === 'PROPIO' && S.propios[l.cod] && l.listaManual && Number(S.propios[l.cod].precio) !== l.listaManual) guardarPrecioPropio(l.cod, l.listaManual);
+}
 function quitarLinea(i) { const b = B(); const l = b.items.splice(i, 1)[0]; guardar('borrador'); pintar(); if (l) aviso(`Se quitó ${l.cod} del presupuesto`, 'ok'); }
 function actualizarPreciosBorrador() {
   const b = B(); b.dolar = S.dolar; const cli = cliente(b.clienteId);
@@ -989,7 +1007,7 @@ function sugerir(v) {
   sugLista = buscarArticulos(v, 12); sugAct = sugLista.length ? 0 : -1;
   const el = document.getElementById('sug');
   if (!sugLista.length) { el.style.display = 'none'; return; }
-  el.innerHTML = sugLista.map((c, i) => { const a = infoArticulo(c); return `<div class="${i === sugAct ? 'act' : ''}" onmousedown="elegirSug(${i})"><span class="mono">${esc(c)}</span><span>${esc(a.desc)}</span><span class="muted" style="margin-left:auto">${a.usd ? plata(a.usd * S.dolar) + ' + IVA' : ''}</span></div>`; }).join('');
+  el.innerHTML = sugLista.map((c, i) => { const a = infoArticulo(c); return `<div class="${i === sugAct ? 'act' : ''}" onmousedown="elegirSug(${i})"><span class="mono">${esc(c)}</span><span>${esc(a.desc)}</span><span class="muted" style="margin-left:auto">${a.usd ? plata(a.usd * S.dolar) + ' + IVA' : a.propio ? (a.precioArs ? plata(a.precioArs) + ' + IVA' : 'propio · sin precio') : ''}</span></div>`; }).join('');
   el.style.display = 'block';
 }
 function cerrarSug() { const el = document.getElementById('sug'); if (el) el.style.display = 'none'; }
@@ -1007,40 +1025,14 @@ function agregarDesdeBuscador() {
   const v = limpiarCodigo(document.getElementById('busq').value);
   if (v.length < 2) return;
   let cod = v;
-  if (!S.precios[cod] && !stockIdx.has(cod)) {
+  const cant = parseInt(document.getElementById('cantNueva').value) || 1;
+  if (!existeArticulo(cod)) {
     const r = buscarArticulos(v, 1);
     if (r.length) cod = r[0];
-    else if (!confirm(`El código ${v} no está en la lista ni en el stock. ¿Agregarlo igual (con precio a mano)?`)) return;
+    else { formArticulo({ id: v }, { cant }); return; }
   }
-  const cant = parseInt(document.getElementById('cantNueva').value) || 1;
   agregarAlBorrador(cod, cant);
   setTimeout(() => { const i = document.getElementById('busq'); if (i) { i.value = ''; i.focus(); } }, 0);
-}
-// --- pegar lista
-function formPegar() {
-  abrirModal(`<h3 style="margin-top:0">Pegar lista desde Excel</h3>
-  <p class="muted">Copiá en Excel las columnas de cantidad y código (en cualquier orden, puede venir también la descripción) y pegalas acá. Una fila por artículo.</p>
-  <textarea class="in" id="txtPegar" rows="10" autofocus placeholder="12	500354584	bulones&#10;1	504006261	tensor"></textarea>
-  <div class="fila" style="margin-top:12px"><button class="btn pri" onclick="procesarPegado()">Agregar al presupuesto</button><button class="btn" onclick="cerrarModal()">Cancelar</button></div>`);
-}
-function procesarPegado() {
-  const filas = document.getElementById('txtPegar').value.split(/\r?\n/).map(f => f.trim()).filter(Boolean);
-  let ok = 0; const raros = [];
-  filas.forEach(f => {
-    const t = f.split(/\t|;|\s{2,}|,(?=\s*\d)/).map(x => x.trim()).filter(Boolean);
-    let cod = '', cant = 1;
-    const esCant = x => /^\d{1,4}([.,]0+)?$/.test(x);
-    let idxCod = t.findIndex(x => !esCant(x) && (S.precios[limpiarCodigo(x)] || stockIdx.has(limpiarCodigo(x))));
-    if (idxCod < 0) idxCod = t.findIndex(x => S.precios[limpiarCodigo(x)] || stockIdx.has(limpiarCodigo(x)));
-    if (idxCod >= 0) cod = limpiarCodigo(t[idxCod]);
-    else { const cand = t.find(x => /^\d{5,}[A-Z]?$/i.test(limpiarCodigo(x))); if (cand) cod = limpiarCodigo(cand); }
-    const nq = t.find((x, i) => i !== idxCod && /^\d{1,4}([.,]0+)?$/.test(x));
-    if (nq) cant = parseInt(nq);
-    if (cod) { agregarSinPintar(cod, cant); ok++; if (!S.precios[cod]) raros.push(cod); }
-    else raros.push(f);
-  });
-  guardar('borrador'); cerrarModal(); pintar();
-  aviso(`${ok} artículos agregados.` + (raros.length ? `\nSin precio o sin reconocer: ${raros.slice(0, 8).join(', ')}${raros.length > 8 ? '…' : ''}` : ''), raros.length ? '' : 'ok');
 }
 function agregarSinPintar(cod, cant) {
   const b = B(); const ya = b.items.find(l => l.cod === cod || baseDe(l).cod === cod || l.reemplazaA === cod);
@@ -1115,6 +1107,223 @@ async function guardarPresupuesto() {
   const i = S.presupuestos.findIndex(x => x.id === nuevo.id); if (i >= 0) S.presupuestos[i] = nuevo; else S.presupuestos.push(nuevo);
   S.borrador = borradorVacio(); guardar('presupuestos', 'borrador');
   aviso((b.editandoId ? 'Cambios guardados en el presupuesto ' : 'Presupuesto guardado: N.º ') + numPresu(nuevo), 'ok'); ir('presupuestos', { sel: nuevo.id });
+}
+
+// ============ Artículos propios (no son de Iveco) ============
+// Viven en la hoja "Artículos propios" de la planilla. Ninguna importación los toca. Precio en pesos, sin IVA, lo ponen ellos.
+function leerStock(v) {
+  let t = String(v === undefined || v === null ? '' : v).trim();
+  if (!t) return null;
+  if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  const n = parseFloat(t.replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+function docPropio(cod) { const p = S.propios[cod] || {}; return { id: cod, desc: p.desc || '', tipo: p.tipo || '', ubic: p.ubic || '', stock: p.stock === undefined ? null : p.stock, precio: p.precio === undefined ? null : p.precio, fecha: p.fecha || '' }; }
+function aPropio(d) { return { desc: d.desc || '', tipo: d.tipo || '', ubic: d.ubic || '', stock: d.stock, precio: d.precio, fecha: d.fecha || '' }; }
+
+// --- crear / editar uno
+// opciones: { cant } viene del buscador del cotizador · { volverPegado } viene de la revisión del pegado rápido
+let opcArticulo = {};
+function formArticulo(doc, opciones) {
+  opcArticulo = opciones || {};
+  const nuevo = !S.propios[doc.id];
+  const d = nuevo ? Object.assign({ desc: '', tipo: '', ubic: '', stock: null, precio: null }, doc) : docPropio(doc.id);
+  const enIveco = doc.id && (S.precios[doc.id] || stockIdx.has(doc.id));
+  abrirModal(`<h3 style="margin-top:0">${nuevo ? 'Crear artículo propio' : 'Editar artículo ' + esc(d.id)}</h3>
+    ${nuevo && doc.id && !enIveco ? `<p class="muted" style="margin-top:0">El código <b>${esc(doc.id)}</b> no está en la lista Iveco, ni en el stock, ni en los artículos propios. Completá los datos y queda guardado para todos.</p>` : ''}
+    ${enIveco ? `<div class="tag t-amber" style="white-space:normal;margin-bottom:8px">Ese código ya está en la lista o en el stock de Iveco: se va a usar el de Iveco.</div>` : ''}
+    <div class="grid g2" style="gap:8px">
+      <div class="campo"><span class="lbl">Código (con el sufijo, ej. LUB020-P-I)</span><input class="in" id="aCod" value="${esc(d.id || '')}" ${nuevo ? '' : 'disabled'}></div>
+      <div class="campo"><span class="lbl">Tipo (PI / PN)</span><input class="in" id="aTipo" value="${esc(d.tipo)}" placeholder="opcional"></div>
+      <div class="campo" style="grid-column:1/-1"><span class="lbl">Descripción</span><input class="in" id="aDesc" value="${esc(d.desc)}"></div>
+      <div class="campo"><span class="lbl">Ubicación</span><input class="in" id="aUbic" value="${esc(d.ubic)}"></div>
+      <div class="campo"><span class="lbl">Stock</span><input class="in" id="aStock" value="${d.stock === null || d.stock === '' ? '' : esc(d.stock)}"></div>
+      <div class="campo" style="grid-column:1/-1"><span class="lbl">Precio en pesos, sin IVA (lo podés dejar vacío y ponerlo después)</span><input class="in" id="aPrecio" value="${d.precio ? fmt(d.precio) : ''}" placeholder="$ sin IVA" style="max-width:220px"></div>
+    </div>
+    <div class="fila" style="margin-top:14px;justify-content:flex-end">
+      ${opcArticulo.cant && nuevo ? `<button class="btn" onclick="cerrarModal();agregarAlBorrador('${esc(doc.id)}',${Number(opcArticulo.cant) || 1})" title="Lo agrega al presupuesto sin guardarlo como artículo">Agregar sin crear (precio a mano)</button>` : ''}
+      <button class="btn" onclick="${opcArticulo.volverPegado ? 'mostrarRevisionPegado()' : 'cerrarModal()'}">Cancelar</button>
+      <button class="btn pri" onclick="guardarArticulo()">${opcArticulo.cant ? 'Guardar y agregar' : 'Guardar'}</button></div>`);
+  setTimeout(() => { const e = document.getElementById(nuevo && !doc.id ? 'aCod' : 'aDesc'); if (e) e.focus(); }, 50);
+}
+async function guardarArticulo() {
+  const cod = limpiarCodigo(document.getElementById('aCod').value);
+  if (cod.length < 2) { aviso('Poné el código', 'err'); return; }
+  const desc = document.getElementById('aDesc').value.trim().toUpperCase();
+  if (!desc) { aviso('Poné la descripción', 'err'); return; }
+  const pTxt = document.getElementById('aPrecio').value.trim();
+  const doc = { id: cod, desc, tipo: document.getElementById('aTipo').value.trim().toUpperCase(), ubic: document.getElementById('aUbic').value.trim().toUpperCase(),
+    stock: leerStock(document.getElementById('aStock').value), precio: pTxt ? leerPesos(pTxt) : null, fecha: hoyISO() };
+  const era = !!S.propios[cod];
+  if (!await docGuardar('articulos', doc, { tipo: 'Artículo propio', detalle: `${cod} ${era ? 'editado' : 'creado'}: ${desc}${doc.precio ? ' · ' + plata(doc.precio) : ' · sin precio'}` })) return;
+  S.propios[cod] = aPropio(doc); guardar('propios');
+  aviso(`Artículo ${cod} ${era ? 'actualizado' : 'creado'}`, 'ok');
+  if (opcArticulo.volverPegado) { mostrarRevisionPegado(); return; }
+  cerrarModal();
+  if (opcArticulo.cant) agregarAlBorrador(cod, Number(opcArticulo.cant) || 1); else pintar();
+}
+async function guardarPrecioPropio(cod, precio) {
+  if ((Number((S.propios[cod] || {}).precio) || 0) === (Number(precio) || 0)) return;
+  const doc = Object.assign(docPropio(cod), { precio: precio || null, fecha: hoyISO() });
+  if (!await docGuardar('articulos', doc, { tipo: 'Artículo propio', detalle: `${cod}: precio ${precio ? plata(precio) : 'vacío'}` })) { pintar(); return; }
+  S.propios[cod] = aPropio(doc); guardar('propios');
+  aviso(`Precio de ${cod} guardado: ${precio ? plata(precio) + ' + IVA' : 'sin precio'}`, 'ok');
+  if (vista === 'articulos') pintarSeguro();
+}
+async function borrarArticulo(cod) {
+  if (!confirm(`¿Borrar el artículo propio ${cod}? Los presupuestos que ya lo tienen lo conservan.`)) return;
+  if (!await docBorrar('articulos', cod, { tipo: 'Artículo propio', detalle: `${cod} borrado (${(S.propios[cod] || {}).desc || ''})` })) return;
+  delete S.propios[cod]; guardar('propios'); pintar();
+}
+
+// --- carga masiva pegando filas del Excel: código | descripción | PI | ubicación | stock | (importe: no se toma)
+let masivo = [];
+function formMasivo() {
+  abrirModal(`<h3 style="margin-top:0">Cargar varios artículos propios</h3>
+    <p class="muted" style="margin-top:0">Copiá las filas en el Excel y pegalas acá, con las columnas en este orden: <b>código · descripción · PI/PN · ubicación · stock</b>. La columna del importe no se toma: el precio lo ponés vos después (queda el lugar vacío).</p>
+    <textarea class="in" id="txtMasivo" rows="10" placeholder="LUB020-P-I	ACEITE DIFERENCIAL 85W140	PI	TALLER	442"></textarea>
+    <div class="fila" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="leerMasivo()">Revisar →</button></div>`, true);
+  setTimeout(() => { const e = document.getElementById('txtMasivo'); if (e) e.focus(); }, 50);
+}
+function leerMasivo() {
+  const filas = document.getElementById('txtMasivo').value.split(/\r?\n/).filter(f => f.trim());
+  masivo = filas.map(f => {
+    const c = f.split('\t').map(x => x.trim());
+    return { id: limpiarCodigo(c[0]), desc: String(c[1] || '').toUpperCase(), tipo: String(c[2] || '').toUpperCase(), ubic: String(c[3] || '').toUpperCase(), stock: leerStock(c[4]), precio: '' };
+  }).filter(r => r.id && !/^(CODIGO|CÓDIGO|COD)$/i.test(r.id));
+  if (!masivo.length) { aviso('No encontré filas. Copiá las celdas del Excel (con tabulaciones) y pegalas.', 'err'); return; }
+  pintarMasivo();
+}
+function pintarMasivo() {
+  const vistos = {};
+  masivo.forEach(r => { vistos[r.id] = (vistos[r.id] || 0) + 1; });
+  const estado = r => !r.id ? '<span class="tag t-red">sin código</span>'
+    : vistos[r.id] > 1 ? '<span class="tag t-red">repetido</span>'
+    : (S.precios[r.id] || stockIdx.has(r.id)) ? '<span class="tag t-amber" title="Se va a usar el de Iveco al cotizar">está en Iveco</span>'
+    : S.propios[r.id] ? '<span class="tag t-gris" title="Se actualizan los datos; si el precio queda vacío se mantiene el que tenía">ya existe: se actualiza</span>'
+    : '<span class="tag t-green">nuevo</span>';
+  const inp = (i, k, w, extra) => `<input class="in" style="width:${w};padding:4px 6px;font-size:12px" value="${esc(masivo[i][k] === null ? '' : masivo[i][k])}" onchange="masivo[${i}].${k}=${k === 'stock' ? 'leerStock(this.value)' : k === 'id' ? 'limpiarCodigo(this.value)' : 'this.value.toUpperCase()'};${k === 'id' ? 'pintarMasivo()' : ''}" ${extra || ''}>`;
+  abrirModal(`<h3 style="margin-top:0">Revisá antes de guardar · ${masivo.length} artículos</h3>
+    <p class="muted" style="margin-top:0">Todo se puede corregir acá. El precio es opcional (en pesos, sin IVA).</p>
+    <div style="max-height:52vh;overflow:auto"><table class="t"><tr><th>Código</th><th>Descripción</th><th>Tipo</th><th>Ubicación</th><th class="der">Stock</th><th class="der">Precio $</th><th></th><th></th></tr>
+    ${masivo.map((r, i) => `<tr><td>${inp(i, 'id', '112px')}</td><td>${inp(i, 'desc', '210px')}</td><td>${inp(i, 'tipo', '42px')}</td><td>${inp(i, 'ubic', '78px')}</td>
+      <td class="der">${inp(i, 'stock', '58px', 'style="text-align:right"')}</td>
+      <td class="der"><input class="in" style="width:86px;padding:4px 6px;font-size:12px;text-align:right" placeholder="vacío" value="${r.precio ? fmt(r.precio) : ''}" onchange="masivo[${i}].precio=this.value.trim()?leerPesos(this.value):''"></td>
+      <td>${estado(r)}</td><td><button class="btn chico rojo" title="Sacar esta fila" onclick="masivo.splice(${i},1);pintarMasivo()">✕</button></td></tr>`).join('')}</table></div>
+    <div class="fila" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="formMasivo()">← Volver a pegar</button><button class="btn" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn pri" onclick="guardarMasivo()">Guardar ${masivo.length} artículos</button></div>`, true);
+}
+async function guardarMasivo() {
+  const vistos = {}; masivo.forEach(r => { vistos[r.id] = (vistos[r.id] || 0) + 1; });
+  if (masivo.some(r => !r.id)) { aviso('Hay filas sin código', 'err'); return; }
+  const rep = Object.keys(vistos).filter(k => vistos[k] > 1);
+  if (rep.length) { aviso('Códigos repetidos: ' + rep.join(', ') + '. Dejá uno solo.', 'err'); return; }
+  if (masivo.some(r => !r.desc) && !confirm('Hay artículos sin descripción. ¿Guardar igual?')) return;
+  const hoy = hoyISO();
+  const docs = masivo.map(r => { const d = { id: r.id, desc: r.desc, tipo: r.tipo, ubic: r.ubic, stock: r.stock, fecha: hoy }; if (r.precio) d.precio = r.precio; else if (!S.propios[r.id]) d.precio = null; return d; });
+  const nuevos = docs.filter(d => !S.propios[d.id]).length;
+  const res = await remoto({ tipo: 'guardarDocs', tabla: 'articulos', fusionar: true, docs, reg: { tipo: 'Artículo propio', detalle: `Carga masiva: ${nuevos} nuevos, ${docs.length - nuevos} actualizados` } }, `Guardando ${docs.length} artículos…`, 90000);
+  if (!res) return;
+  docs.forEach(d => { S.propios[d.id] = aPropio(Object.assign(docPropio(d.id), d)); });
+  guardar('propios'); cerrarModal(); masivo = [];
+  aviso(`${docs.length} artículos guardados (${nuevos} nuevos)`, 'ok');
+  if (vista === 'articulos') pintar(); else ir('articulos');
+}
+
+// --- vista: lista de artículos propios
+let qArt = '', soloSinPrecio = false;
+VISTAS.articulos = function () {
+  const todos = Object.keys(S.propios).sort();
+  const sinPrecio = todos.filter(c => !Number(S.propios[c].precio)).length;
+  const q = normalizar(qArt);
+  const vis = todos.filter(c => (!soloSinPrecio || !Number(S.propios[c].precio)) && (!q || normalizar(c + ' ' + S.propios[c].desc + ' ' + S.propios[c].ubic).includes(q)));
+  main(`<div class="cab"><div><h1>Artículos propios</h1><p>Artículos que no son de Iveco. Precio en pesos, sin IVA, lo ponen ustedes. Las importaciones de stock y de lista Iveco no los tocan.</p></div>
+    <div class="fila"><button class="btn" onclick="formMasivo()">Pegar varios desde Excel</button><button class="btn pri" onclick="formArticulo({id:''})">＋ Nuevo artículo</button></div></div>
+  <div class="fila" style="margin-bottom:12px">
+    <button class="chip ${!soloSinPrecio ? 'on' : ''}" onclick="soloSinPrecio=false;pintar()">Todos <b>${todos.length}</b></button>
+    <button class="chip ${soloSinPrecio ? 'on' : ''}" onclick="soloSinPrecio=true;pintar()" ${sinPrecio ? 'style="border-color:var(--amber)"' : ''}>Sin precio <b>${sinPrecio}</b></button>
+    <input class="in" id="qArt" placeholder="Buscar código, descripción o ubicación…" style="max-width:300px;margin-left:auto" value="${esc(qArt)}" oninput="qArt=this.value;clearTimeout(window._ta);window._ta=setTimeout(()=>{pintar();const e=document.getElementById('qArt');e.focus();e.setSelectionRange(e.value.length,e.value.length)},250)"></div>
+  <div class="panel tabla-scroll">${vis.length ? `<table class="t"><tr><th>Código</th><th>Descripción</th><th>Tipo</th><th>Ubicación</th><th class="der">Stock</th><th class="der">Precio $ sin IVA</th><th>Actualizado</th><th></th></tr>
+    ${vis.slice(0, 400).map(c => { const p = S.propios[c]; return `<tr><td class="num" style="color:var(--amber)">${esc(c)}</td><td>${esc(p.desc)}</td><td>${esc(p.tipo)}</td><td>${esc(p.ubic)}</td>
+      <td class="der num">${p.stock === null || p.stock === '' || p.stock === undefined ? '—' : fmt(p.stock, 0)}</td>
+      <td class="der"><input class="in" style="width:120px;text-align:right;${Number(p.precio) ? '' : 'border-color:var(--amber)'}" placeholder="poner precio" value="${Number(p.precio) ? fmt(p.precio) : ''}" data-c="${esc(c)}" onchange="guardarPrecioPropio(this.dataset.c, this.value.trim() ? leerPesos(this.value) : null)"></td>
+      <td class="muted" style="font-size:12px">${esc(fechaAR(p.fecha))}</td>
+      <td><div class="fila" style="gap:4px;flex-wrap:nowrap"><button class="btn chico" data-c="${esc(c)}" onclick="formArticulo({id:this.dataset.c})">✎</button><button class="btn chico rojo" data-c="${esc(c)}" onclick="borrarArticulo(this.dataset.c)">✕</button></div></td></tr>`; }).join('')}</table>
+    ${vis.length > 400 ? `<div class="muted" style="margin-top:8px">Mostrando 400 de ${vis.length}. Usá el buscador.</div>` : ''}`
+    : `<div class="vacio">${todos.length ? 'Nada coincide con la búsqueda.' : 'Todavía no hay artículos propios. Cargalos de a uno con “＋ Nuevo artículo” o varios de una con “Pegar varios desde Excel”.'}</div>`}</div>`);
+};
+
+// ============ Presupuesto rápido: pegar códigos y cantidades ============
+let pegado = [];
+function formPegar() {
+  abrirModal(`<h3 style="margin-top:0">Pegar códigos y cantidades</h3>
+    <p class="muted" style="margin-top:0">Una línea por artículo: <b>código y cantidad</b>, en cualquier orden, separados por espacio o tabulación (podés copiar dos columnas del Excel, de un mail o de WhatsApp). Si no ponés cantidad, va 1.</p>
+    <textarea class="in" id="txtPegar" rows="12" placeholder="2992544 12&#10;500041178	40&#10;LUB020-P-I 2"></textarea>
+    <div class="fila" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="leerPegado()">Revisar →</button></div>`);
+  setTimeout(() => { const e = document.getElementById('txtPegar'); if (e) e.focus(); }, 50);
+}
+function leerLineaPegada(f) {
+  const t = f.split(/[\t;]|\s+/).map(x => x.trim()).filter(Boolean);
+  const esCant = x => /^\d{1,5}([.,]\d+)?$/.test(x);
+  let iCod = t.findIndex(x => existeArticulo(limpiarCodigo(x)));
+  if (iCod < 0) iCod = t.findIndex(x => !esCant(x) && /\d/.test(x));
+  if (iCod < 0) iCod = t.findIndex(x => x.replace(/\D/g, '').length >= 6);
+  if (iCod < 0) return null;
+  const iCant = t.findIndex((x, i) => i !== iCod && esCant(x));
+  const cant = iCant >= 0 ? Math.max(1, Math.round(parseFloat(t[iCant].replace(',', '.')))) : 1;
+  return { cod: limpiarCodigo(t[iCod]), cant };
+}
+function leerPegado() {
+  const lineas = document.getElementById('txtPegar').value.split(/\r?\n/).filter(f => f.trim());
+  const malas = [];
+  pegado = [];
+  lineas.forEach(f => { const r = leerLineaPegada(f); if (r) pegado.push(r); else malas.push(f.trim()); });
+  if (!pegado.length) { aviso('No encontré códigos en lo que pegaste.', 'err'); return; }
+  if (malas.length) aviso(`No se entendieron ${malas.length} líneas: ${malas.slice(0, 5).join(' · ')}`, '');
+  mostrarRevisionPegado();
+}
+function mostrarRevisionPegado() {
+  const b = B(); const cli = cliente(b.clienteId);
+  const cuenta = {}; pegado.forEach(r => { cuenta[r.cod] = (cuenta[r.cod] || 0) + 1; });
+  let total = 0, faltan = 0;
+  const filas = pegado.map((r, i) => {
+    const a = infoArticulo(r.cod); const existe = existeArticulo(r.cod);
+    const lista = a.propio ? a.precioArs : a.usd * b.dolar;
+    const desc = a.propio ? 0 : descCliente(cli, a.D).pct;
+    const unit = r2(lista * (1 - desc / 100)); if (existe) total += unit * r.cant; else faltan++;
+    const reemp = S.reemplazos[r.cod];
+    return `<tr><td><input class="in" style="width:130px;padding:4px 6px" value="${esc(r.cod)}" onchange="pegado[${i}].cod=limpiarCodigo(this.value);delete pegado[${i}].reemplazaA;mostrarRevisionPegado()">
+        ${r.reemplazaA ? `<div style="font-size:11px" class="muted">reemplaza a ${esc(r.reemplazaA)}</div>` : ''}</td>
+      <td style="font-size:13px">${existe ? esc(a.desc) : '<span class="tag t-red">No existe</span> <button class="btn chico azul" onclick="formArticulo({id:pegado[' + i + '].cod},{volverPegado:true})">＋ Crear</button>'}
+        ${a.propio ? ' <span class="tag t-violet">propio</span>' : ''}${cuenta[r.cod] > 1 ? ' <span class="tag t-amber">repetido: se suman</span>' : ''}
+        ${reemp && !r.reemplazaA ? `<div><span class="tag t-amber">Tiene reemplazo: ${esc(reemp)}</span> <button class="btn chico azul" onclick="pegado[${i}].reemplazaA=pegado[${i}].cod;pegado[${i}].cod='${esc(reemp)}';mostrarRevisionPegado()">Usar</button></div>` : ''}</td>
+      <td class="der"><input class="in" type="number" min="1" style="width:70px;text-align:right;padding:4px 6px" value="${r.cant}" onchange="pegado[${i}].cant=Math.max(1,parseInt(this.value)||1);mostrarRevisionPegado()"></td>
+      <td class="der num">${existe ? (lista ? plata(unit) : '<span class="muted">sin precio</span>') : ''}${desc ? ` <span class="muted" style="font-size:11px">(-${desc}%)</span>` : ''}</td>
+      <td class="der num" style="font-size:12px">${existe ? (a.stock !== null ? esc(a.stock) : '<span class="muted">—</span>') : ''}</td>
+      <td><button class="btn chico rojo" title="Sacar" onclick="pegado.splice(${i},1);mostrarRevisionPegado()">✕</button></td></tr>`;
+  }).join('');
+  const listos = pegado.filter(r => existeArticulo(r.cod)).length;
+  abrirModal(`<h3 style="margin-top:0">Revisá antes de agregar · ${pegado.length} renglones</h3>
+    <p class="muted" style="margin-top:0">${cli ? 'Precios con el descuento de ' + esc(cli.nombre) : 'Sin cliente elegido: precios de lista'}, sin IVA. Podés corregir códigos y cantidades.</p>
+    <div style="max-height:52vh;overflow:auto"><table class="t"><tr><th>Código</th><th>Descripción</th><th class="der">Cant</th><th class="der">Unitario</th><th class="der">Stock</th><th></th></tr>${filas}</table></div>
+    <div class="fila" style="margin-top:10px;justify-content:space-between">
+      <div class="muted">Total aprox.: <b>${plata(total)}</b> + IVA${faltan ? ` · <span style="color:var(--red)">${faltan} no existen</span>` : ''}</div>
+      ${faltan ? `<label style="font-size:13px;cursor:pointer"><input type="checkbox" id="pegarTodos"> Agregar también los que no existen (precio a mano)</label>` : ''}</div>
+    <div class="fila" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="formPegar()">← Volver a pegar</button><button class="btn" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn pri" onclick="agregarPegado()">Agregar al presupuesto</button></div>`, true);
+}
+function agregarPegado() {
+  const todos = document.getElementById('pegarTodos') && document.getElementById('pegarTodos').checked;
+  const b = B(); let n = 0, salteados = 0;
+  pegado.forEach(r => {
+    if (!existeArticulo(r.cod) && !todos) { salteados++; return; }
+    const yaEstaba = b.items.some(x => x.cod === r.cod || baseDe(x).cod === r.cod || x.reemplazaA === r.cod);
+    agregarSinPintar(r.cod, r.cant); n++;
+    // la marca "reemplaza a" solo en un renglón nuevo (si se sumó a uno que ya estaba, no se cambia)
+    if (r.reemplazaA && !yaEstaba) { const l = b.items.find(x => x.cod === r.cod || baseDe(x).cod === r.cod); if (l && !l.reemplazaA) l.reemplazaA = r.reemplazaA; }
+  });
+  guardar('borrador'); cerrarModal(); pegado = []; pintar();
+  aviso(`${n} artículos agregados al presupuesto` + (salteados ? ` · ${salteados} sin agregar porque no existen` : ''), salteados ? '' : 'ok');
 }
 
 // ============ Presupuestos ============
@@ -2019,7 +2228,7 @@ function avisarVencimientos() {
 // Todo lo compartido vive en la planilla "Navicam App Datos". Este dispositivo guarda una copia para abrir rápido y sin señal.
 const URL_API_PROD = 'https://script.google.com/macros/s/AKfycbwY3sVIFHj0Nbymj8P66lrOXABlW_Knh6xIFuY-mU539xOPD8VVk-NPNpR87scLpiTJBg/exec';
 const URL_API = (() => { try { const u = new URLSearchParams(location.search).get('api'); if (u && /^http:\/\/localhost(:\d+)?\//.test(u)) return u; } catch (e) {} return URL_API_PROD; })();
-const TABLAS_DOCS = ['clientes', 'presupuestos', 'agenda', 'notas', 'reemplazos', 'motivos', 'ajustes'];
+const TABLAS_DOCS = ['clientes', 'presupuestos', 'agenda', 'notas', 'reemplazos', 'motivos', 'ajustes', 'articulos'];
 
 function fetchConLimite(url, opciones, ms) {
   const ac = new AbortController();
@@ -2113,8 +2322,9 @@ function aplicarTabla(t, docs) {
   else if (t === 'notas') { S.notas = {}; docs.forEach(d => { if (d.texto) S.notas[d.id] = { texto: d.texto, fecha: d.fecha, ts: d.ts || 0 }; }); }
   else if (t === 'reemplazos') { S.reemplazos = {}; docs.forEach(d => { if (d.nuevo) S.reemplazos[d.id] = d.nuevo; }); }
   else if (t === 'motivos') { const l = docs.slice().sort((a, b) => (a.orden || 0) - (b.orden || 0)).map(d => d.id); S.motivos = l.length ? l : MOTIVOS_BASE.slice(); }
+  else if (t === 'articulos') { S.propios = {}; docs.forEach(d => { S.propios[d.id] = { desc: d.desc || '', tipo: d.tipo || '', ubic: d.ubic || '', stock: d.stock, precio: d.precio, fecha: d.fecha || '' }; }); }
   else if (t === 'ajustes') { const a = { ...AJUSTES_BASE }; docs.forEach(d => { a[d.id] = d.id === 'validez' ? Number(d.valor) || 7 : d.valor; }); S.ajustes = a; }
-  guardar(t === 'notas' ? 'notas' : t);
+  guardar(t === 'articulos' ? 'propios' : t);
 }
 function aplicarSobre(sobre) {
   if (!sobre) return;
@@ -2175,10 +2385,10 @@ function estadoSync(e) {
     + (planillaUrl ? ` · <a href="${esc(planillaUrl)}" target="_blank">planilla</a>` : '');
 }
 // ---- Protección: este dispositivo nunca se vacía por una respuesta rara del servidor ----
-const NOMBRE_DATO = { clientes: 'clientes', presupuestos: 'presupuestos', reemplazos: 'reemplazos', notas: 'anotaciones', agenda: 'fechas de agenda', stock: 'artículos de stock', precios: 'precios', repos: 'reposicionados', nexpro: 'equivalencias NEXPRO', sobre: 'renglones de sobre stock' };
+const NOMBRE_DATO = { clientes: 'clientes', presupuestos: 'presupuestos', reemplazos: 'reemplazos', notas: 'anotaciones', agenda: 'fechas de agenda', stock: 'artículos de stock', precios: 'precios', repos: 'reposicionados', nexpro: 'equivalencias NEXPRO', sobre: 'renglones de sobre stock', articulos: 'artículos propios' };
 function cantidadLocal(t) {
   const n = o => Array.isArray(o) ? o.length : o ? Object.keys(o).length : 0;
-  return { clientes: n(S.clientes), presupuestos: n(S.presupuestos), reemplazos: n(S.reemplazos), notas: n(S.notas), agenda: n(S.agenda), stock: n(S.stock), precios: n(S.precios), repos: n(S.reposicionado), nexpro: n(S.nexpro), sobre: n(S.sobre) }[t] || 0;
+  return { clientes: n(S.clientes), presupuestos: n(S.presupuestos), reemplazos: n(S.reemplazos), notas: n(S.notas), agenda: n(S.agenda), stock: n(S.stock), precios: n(S.precios), repos: n(S.reposicionado), nexpro: n(S.nexpro), sobre: n(S.sobre), articulos: n(S.propios) }[t] || 0;
 }
 let alertasDatos = [];
 // true = se puede aplicar. Si llegan muchos menos datos que los que hay acá (menos de la mitad), no se toca nada.
@@ -2271,7 +2481,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-16 09:09';
+const VERSION_APP = '2026-10-16 10:01';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));

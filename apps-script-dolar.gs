@@ -14,7 +14,7 @@ const HOJAS = {
   cajones: 'Cajones', registro: 'Registro', ultimo: '_ultimo_excel_stock',
   repos: 'Reposicionados', nexpro: 'NEXPRO',
   clientes: 'Clientes', presupuestos: 'Presupuestos', agenda: 'Agenda', notas: 'Anotaciones',
-  reemplazos: 'Reemplazos', motivos: 'Motivos', ajustes: 'Ajustes'
+  reemplazos: 'Reemplazos', motivos: 'Motivos', ajustes: 'Ajustes', articulos: 'Artículos propios'
 };
 // Tablas de "documentos" (una fila por registro, primera columna = ID). Se pueden editar a mano.
 // [campo, encabezado, tipo]  tipo: '' texto · 'n' número · 'j' JSON · 'b' sí/no
@@ -29,7 +29,9 @@ const TABLAS = {
   notas: [['id', 'Código'], ['texto', 'Anotación'], ['fecha', 'Fecha'], ['ts', 'TS', 'n']],
   reemplazos: [['id', 'Código pedido'], ['nuevo', 'Código nuevo']],
   motivos: [['id', 'Motivo'], ['orden', 'Orden', 'n']],
-  ajustes: [['id', 'Clave'], ['valor', 'Valor']]
+  ajustes: [['id', 'Clave'], ['valor', 'Valor']],
+  // Artículos que no son de Iveco: los cargan ellos y no los toca ninguna importación
+  articulos: [['id', 'Código'], ['desc', 'Descripción'], ['tipo', 'Tipo (PI/PN)'], ['ubic', 'Ubicación'], ['stock', 'Stock', 'n'], ['precio', 'Precio $ sin IVA', 'n'], ['fecha', 'Actualizado']]
 };
 
 const ENC = {
@@ -486,6 +488,13 @@ function aplicarOperacion(op) {
     const docs = Array.isArray(op.docs) ? op.docs : [];
     if (!TABLAS[op.tabla]) return { ok: false, error: 'tabla desconocida' };
     if (op.reemplazarTodo) escribirTabla(op.tabla, docs.filter(d => d && d.id).map(d => docAFila(op.tabla, d)));
+    else if (op.fusionar) {
+      // muchos de una: se lee la tabla una vez, se agregan o actualizan (sin borrar los campos que no vienen) y se escribe de una
+      const m = {}, orden = [];
+      leerDocs(op.tabla).forEach(d => { m[d.id] = d; orden.push(d.id); });
+      docs.forEach(d => { if (!d || !d.id) return; const id = String(d.id).trim(); if (!m[id]) orden.push(id); m[id] = Object.assign({}, m[id] || {}, d, { id }); });
+      escribirTabla(op.tabla, orden.map(id => docAFila(op.tabla, m[id])));
+    }
     else docs.forEach(d => guardarDocServidor(op.tabla, d));
     subirVersion('t_' + op.tabla, {});
     resultado = { tabla: op.tabla, cantidad: docs.length };

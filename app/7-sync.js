@@ -2,7 +2,7 @@
 // Todo lo compartido vive en la planilla "Navicam App Datos". Este dispositivo guarda una copia para abrir rápido y sin señal.
 const URL_API_PROD = 'https://script.google.com/macros/s/AKfycbwY3sVIFHj0Nbymj8P66lrOXABlW_Knh6xIFuY-mU539xOPD8VVk-NPNpR87scLpiTJBg/exec';
 const URL_API = (() => { try { const u = new URLSearchParams(location.search).get('api'); if (u && /^http:\/\/localhost(:\d+)?\//.test(u)) return u; } catch (e) {} return URL_API_PROD; })();
-const TABLAS_DOCS = ['clientes', 'presupuestos', 'agenda', 'notas', 'reemplazos', 'motivos', 'ajustes'];
+const TABLAS_DOCS = ['clientes', 'presupuestos', 'agenda', 'notas', 'reemplazos', 'motivos', 'ajustes', 'articulos'];
 
 function fetchConLimite(url, opciones, ms) {
   const ac = new AbortController();
@@ -96,8 +96,9 @@ function aplicarTabla(t, docs) {
   else if (t === 'notas') { S.notas = {}; docs.forEach(d => { if (d.texto) S.notas[d.id] = { texto: d.texto, fecha: d.fecha, ts: d.ts || 0 }; }); }
   else if (t === 'reemplazos') { S.reemplazos = {}; docs.forEach(d => { if (d.nuevo) S.reemplazos[d.id] = d.nuevo; }); }
   else if (t === 'motivos') { const l = docs.slice().sort((a, b) => (a.orden || 0) - (b.orden || 0)).map(d => d.id); S.motivos = l.length ? l : MOTIVOS_BASE.slice(); }
+  else if (t === 'articulos') { S.propios = {}; docs.forEach(d => { S.propios[d.id] = { desc: d.desc || '', tipo: d.tipo || '', ubic: d.ubic || '', stock: d.stock, precio: d.precio, fecha: d.fecha || '' }; }); }
   else if (t === 'ajustes') { const a = { ...AJUSTES_BASE }; docs.forEach(d => { a[d.id] = d.id === 'validez' ? Number(d.valor) || 7 : d.valor; }); S.ajustes = a; }
-  guardar(t === 'notas' ? 'notas' : t);
+  guardar(t === 'articulos' ? 'propios' : t);
 }
 function aplicarSobre(sobre) {
   if (!sobre) return;
@@ -158,10 +159,10 @@ function estadoSync(e) {
     + (planillaUrl ? ` · <a href="${esc(planillaUrl)}" target="_blank">planilla</a>` : '');
 }
 // ---- Protección: este dispositivo nunca se vacía por una respuesta rara del servidor ----
-const NOMBRE_DATO = { clientes: 'clientes', presupuestos: 'presupuestos', reemplazos: 'reemplazos', notas: 'anotaciones', agenda: 'fechas de agenda', stock: 'artículos de stock', precios: 'precios', repos: 'reposicionados', nexpro: 'equivalencias NEXPRO', sobre: 'renglones de sobre stock' };
+const NOMBRE_DATO = { clientes: 'clientes', presupuestos: 'presupuestos', reemplazos: 'reemplazos', notas: 'anotaciones', agenda: 'fechas de agenda', stock: 'artículos de stock', precios: 'precios', repos: 'reposicionados', nexpro: 'equivalencias NEXPRO', sobre: 'renglones de sobre stock', articulos: 'artículos propios' };
 function cantidadLocal(t) {
   const n = o => Array.isArray(o) ? o.length : o ? Object.keys(o).length : 0;
-  return { clientes: n(S.clientes), presupuestos: n(S.presupuestos), reemplazos: n(S.reemplazos), notas: n(S.notas), agenda: n(S.agenda), stock: n(S.stock), precios: n(S.precios), repos: n(S.reposicionado), nexpro: n(S.nexpro), sobre: n(S.sobre) }[t] || 0;
+  return { clientes: n(S.clientes), presupuestos: n(S.presupuestos), reemplazos: n(S.reemplazos), notas: n(S.notas), agenda: n(S.agenda), stock: n(S.stock), precios: n(S.precios), repos: n(S.reposicionado), nexpro: n(S.nexpro), sobre: n(S.sobre), articulos: n(S.propios) }[t] || 0;
 }
 let alertasDatos = [];
 // true = se puede aplicar. Si llegan muchos menos datos que los que hay acá (menos de la mitad), no se toca nada.
