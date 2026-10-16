@@ -134,8 +134,9 @@ async function bajarPorPartes(tipo, nombre) {
   return { meta: primera.meta, filas: [].concat(...partes.map(p => p.filas)) };
 }
 const GRANDES = { stock: 'stock', precios: 'lista de precios', repos: 'reposicionados', nexpro: 'equivalencias NEXPRO' };
-async function bajarGrande(tipo) {
+async function bajarGrande(tipo, forzar) {
   const d = await bajarPorPartes(tipo, GRANDES[tipo]);
+  if (!aceptarDatos(tipo === 'repos' ? 'repos' : tipo, d.filas.length, forzar)) return false;
   if (tipo === 'stock') S.stock = d.filas;
   else if (tipo === 'precios') { const o = {}; d.filas.forEach(r => { o[r[0]] = [r[1], r[2], r[3]]; }); S.precios = o; }
   else if (tipo === 'repos') { const o = {}; d.filas.forEach(r => { o[r[0]] = r[1]; }); S.reposicionado = o; }
@@ -143,6 +144,7 @@ async function bajarGrande(tipo) {
   S.archivos[tipo] = d.meta ? ((d.meta.archivo || '') + (d.meta.fecha ? ' · ' + d.meta.fecha : '')).replace(/^ · /, '') : '';
   S.metas[tipo] = d.meta ? d.meta.version : null;
   guardar(tipo === 'repos' ? 'reposicionado' : tipo, 'metas', 'archivos');
+  return true;
 }
 
 // --- sincronización
@@ -152,17 +154,39 @@ function estadoSync(e) {
   const el = document.getElementById('estadoSync'); if (!el) return;
   const color = _sync.ok === true ? 'var(--green)' : _sync.ok === false ? 'var(--red)' : 'var(--amber)';
   const m = document.getElementById('syncMovil'); if (m) { m.style.background = color; m.title = _sync.ok === true ? 'Sincronizado ' + _sync.hora : _sync.ok === false ? 'Sin conexión con Google' : _sync.msg; }
-  el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>${esc(_sync.ok === true ? 'Sincronizado ' + _sync.hora : _sync.ok === false ? 'Sin conexión con Google' : _sync.msg)}`
+  el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>${esc(_sync.ok === true ? 'Sincronizado ' + _sync.hora : _sync.ok === false ? (_sync.alerta ? '⚠ Datos protegidos: no se bajó nada' : 'Sin conexión con Google') : _sync.msg)}`
     + (planillaUrl ? ` · <a href="${esc(planillaUrl)}" target="_blank">planilla</a>` : '');
 }
+// ---- Protección: este dispositivo nunca se vacía por una respuesta rara del servidor ----
+const NOMBRE_DATO = { clientes: 'clientes', presupuestos: 'presupuestos', reemplazos: 'reemplazos', notas: 'anotaciones', agenda: 'fechas de agenda', stock: 'artículos de stock', precios: 'precios', repos: 'reposicionados', nexpro: 'equivalencias NEXPRO', sobre: 'renglones de sobre stock' };
+function cantidadLocal(t) {
+  const n = o => Array.isArray(o) ? o.length : o ? Object.keys(o).length : 0;
+  return { clientes: n(S.clientes), presupuestos: n(S.presupuestos), reemplazos: n(S.reemplazos), notas: n(S.notas), agenda: n(S.agenda), stock: n(S.stock), precios: n(S.precios), repos: n(S.reposicionado), nexpro: n(S.nexpro), sobre: n(S.sobre) }[t] || 0;
+}
+let alertasDatos = [];
+// true = se puede aplicar. Si llegan muchos menos datos que los que hay acá (menos de la mitad), no se toca nada.
+function aceptarDatos(t, nuevos, forzar) {
+  const hay = cantidadLocal(t);
+  if (hay < 5 || nuevos >= hay * 0.5) return true;
+  const txt = `La planilla trae ${nuevos} ${NOMBRE_DATO[t] || t} y en este dispositivo hay ${hay}.`;
+  if (forzar && confirm(txt + '\n\n¿Reemplazar igual lo de este dispositivo? (Si no estás seguro, poné Cancelar: no se borra nada.)')) return true;
+  alertasDatos.push(txt);
+  return false;
+}
+function idPlanilla(url) { const m = String(url || '').match(/\/d\/([^/]+)/); return m ? m[1] : ''; }
 async function sincronizar(forzar) {
   if (sincronizando || escribiendo) return; sincronizando = true;
-  let cambio = false;
+  let cambio = false; alertasDatos = [];
   try {
     const d = await apiGet({ accion: 'estado' });
     if (!d.servidor) throw new Error('El servidor de Google todavía es la versión anterior');
+    // Si el servidor empezara a usar otra planilla, no se baja nada de ella
+    const pid = idPlanilla(d.planillaUrl);
+    if (pid && S.metas.planillaId && pid !== S.metas.planillaId && !(forzar && confirm('El servidor está usando una planilla de datos distinta a la de siempre. ¿Pasar a usar la nueva? (Si no estás seguro, poné Cancelar: no se toca nada.)')))
+      throw new Error('ALERTA: el servidor está usando otra planilla. No se bajó nada y tus datos siguen como estaban. Avisá antes de seguir.');
+    if (pid && pid !== S.metas.planillaId) { S.metas.planillaId = pid; guardar('metas'); }
     if (d.dolar > 0 && d.dolar !== S.dolar) { S.dolar = Number(d.dolar); guardar('dolar'); pintarDolar(); cambio = true; }
-    if (d.sobre && d.sobre.version !== S.metas.sobre) { aplicarSobre(d.sobre); cambio = true; }
+    if (d.sobre && d.sobre.version !== S.metas.sobre && aceptarDatos('sobre', (d.sobre.items || []).length, forzar)) { aplicarSobre(d.sobre); cambio = true; }
     if (d.ubicaciones && JSON.stringify(d.ubicaciones) !== JSON.stringify(S.ubicCambios)) { S.ubicCambios = d.ubicaciones; guardar('ubicCambios'); cambio = true; }
     if (d.planillaUrl) planillaUrl = d.planillaUrl;
     const m = d.metas || {};
@@ -170,21 +194,24 @@ async function sincronizar(forzar) {
       const v = m['t_' + t] ? m['t_' + t].version : 0;
       if (forzar || v !== (S.metas['t_' + t] || 0) || S.metas['t_' + t] === undefined) {
         const r = await apiGet({ accion: 'tabla', t }, 30000);
-        if (r && Array.isArray(r.docs)) { aplicarTabla(t, r.docs); S.metas['t_' + t] = r.meta ? r.meta.version : 0; cambio = true; }
+        if (r && Array.isArray(r.docs) && aceptarDatos(t, r.docs.length, forzar)) { aplicarTabla(t, r.docs); S.metas['t_' + t] = r.meta ? r.meta.version : 0; cambio = true; }
       }
     }
     for (const g of Object.keys(GRANDES)) {
       const v = m[g] ? m[g].version : null;
-      if (v !== null && (forzar || v !== S.metas[g])) { await bajarGrande(g); cambio = true; }
+      if (v !== null && (forzar || v !== S.metas[g]) && await bajarGrande(g, forzar)) cambio = true;
     }
     guardar('metas');
     if (cambio) { indexarStock(); indexarSobre(); }
     _sync.hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    if (alertasDatos.length) throw new Error('ALERTA: ' + alertasDatos.join(' '));
     estadoSync({ ok: true });
     if (!S.metas.notasViejas) await migrarNotasViejas();
   } catch (e) {
     console.warn('Sincronización fallida', e);
-    estadoSync({ ok: false, msg: e.message });
+    const alerta = /^ALERTA/.test(e.message);
+    estadoSync({ ok: false, alerta, msg: e.message });
+    if (alerta) avisarAlerta(e.message.replace(/^ALERTA: /, ''));
   }
   sincronizando = false;
   if (cambio) pintarSeguro();
@@ -199,6 +226,14 @@ function pintarSeguro() {
   pintar();
 }
 document.addEventListener('focusout', () => { if (repintarPendiente) { repintarPendiente = false; setTimeout(pintarSeguro, 400); } });
+// Aviso fijo (no se va solo) cuando se frenó una descarga sospechosa
+let alertaMostrada = '';
+function avisarAlerta(txt) {
+  if (alertaMostrada === txt) return; alertaMostrada = txt;
+  const d = document.createElement('div'); d.className = 'err';
+  d.innerHTML = `<b>⚠ Datos protegidos</b><br>${esc(txt)}<br><span style="font-size:12px">No se borró nada de este dispositivo. Avisá antes de seguir cargando.</span> <button class="btn chico" style="margin-left:6px" onclick="this.parentNode.remove()">Entendido</button>`;
+  document.getElementById('toast').appendChild(d);
+}
 async function refrescarRegistro() {
   try { const d = await apiGet({ accion: 'registro' }); if (Array.isArray(d.registro)) { S.registro = d.registro; guardar('registro'); if (vista === 'historial') pintarSeguro(); } } catch (e) {}
 }
