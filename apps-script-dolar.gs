@@ -528,10 +528,13 @@ function aplicarOperacion(op) {
   } else if (op.tipo === 'eliminarCajon') {
     const nombre = normCajon(op.nombre);
     if (cargarSobre().cajones.indexOf(nombre) === -1) return { ok: false, error: 'No existe el cajón ' + nombre };
-    const n = sobre.items.filter(x => x.CAJON === nombre).length;
-    if (n > 0) return { ok: false, error: 'El cajón ' + nombre + ' tiene ' + n + ' artículos. Eliminá los artículos primero.' };
+    const adentro = sobre.items.filter(x => x.CAJON === nombre);
+    if (adentro.length && !op.conArticulos) return { ok: false, error: 'El cajón ' + nombre + ' tiene ' + adentro.length + ' artículos. Eliminá los artículos primero.' };
+    // con conArticulos: se borra el cajón entero con todo lo que tiene (queda el detalle en el registro)
+    if (adentro.length) sobre.items = sobre.items.filter(x => x.CAJON !== nombre);
     sobre.cajones = sobre.cajones.filter(c => c !== nombre); cambioSobre = true;
-    tipo = 'BAJA_CAJON'; detalle = 'Cajón eliminado: ' + nombre;
+    tipo = 'BAJA_CAJON';
+    detalle = 'Cajón eliminado: ' + nombre + (adentro.length ? ' con ' + adentro.length + ' artículos: ' + adentro.map(x => x.CODIGO + ' x' + x.CANTIDAD).join(', ') : '');
 
   } else if (op.tipo === 'cambiarUbicacion') {
     const codigo = cod(op.codigo), nueva = String(op.nueva || '').trim().toUpperCase();

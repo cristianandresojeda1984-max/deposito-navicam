@@ -192,7 +192,7 @@ table.t tr.sel td{background:#172744}
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-20 15:21</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-20 17:04</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -629,7 +629,7 @@ function listaSobre() {
   let it = S.sobre;
   if (cajonSel) it = it.filter(x => x.cajon === cajonSel);
   if (q) it = it.filter(x => normalizar(x.cod + ' ' + x.ubic + ' ' + x.cajon).includes(q));
-  el.innerHTML = `<div class="fila" style="margin-bottom:10px"><button class="btn chico" onclick="cajonSel='';qSobre='';ir('sobre')">← Todos los cajones</button>${cajonSel ? `<span class="chip on">${esc(cajonSel)}</span><button class="btn chico" style="margin-left:auto" onclick="pdfCajones([cajonSel])">🖨 PDF de este cajón</button>` : ''}</div>
+  el.innerHTML = `<div class="fila" style="margin-bottom:10px"><button class="btn chico" onclick="cajonSel='';qSobre='';ir('sobre')">← Todos los cajones</button>${cajonSel ? `<span class="chip on">${esc(cajonSel)}</span><button class="btn chico" style="margin-left:auto" onclick="pdfCajones([cajonSel])">🖨 PDF de este cajón</button><button class="btn chico rojo" onclick="formBorrarCajon(cajonSel)">🗑 Borrar cajón entero</button>` : ''}</div>
   <div class="panel tabla-scroll">${it.length ? `<table class="t"><tr><th>Código</th><th>Descripción</th><th>Cajón</th><th>Ubicación</th><th class="der">Cantidad</th><th>Nota del cambio (opcional)</th><th></th></tr>
   ${it.slice(0, 200).map(x => `<tr><td class="num" style="color:var(--amber)">${esc(x.cod)}</td><td>${esc(infoArticulo(x.cod).desc)}</td><td>${esc(x.cajon)}</td>
     <td><input class="in" id="su_${x.id}" value="${esc(x.ubic)}" style="width:100px"></td>
@@ -915,6 +915,39 @@ function pdfReponer() {
   }));
   pieDePagina(doc, 'Reponer en estantería · impreso el ' + fecha);
   doc.save('Reponer en estanteria ' + fecha.replace(/\//g, '-') + '.pdf');
+}
+
+// --- borrar un cajón entero (con todo lo que tiene adentro)
+function formBorrarCajon(nombre) {
+  const it = S.sobre.filter(x => x.cajon === nombre);
+  const u = it.reduce((a, x) => a + x.cant, 0);
+  abrirModal(`<h3 style="margin-top:0;color:var(--red)">Borrar ${esc(nombre)} entero</h3>
+    <p style="margin-top:0">Se borra el cajón con sus <b>${it.length} artículos (${u} unidades)</b> del sobre stock. El stock total no cambia. Queda anotado en el Historial con el detalle de lo que tenía.</p>
+    ${it.length ? `<div class="muted" style="font-size:12px;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:10px">${it.map(x => `${esc(x.cod)} · ${x.cant} u. · ${esc(infoArticulo(x.cod).desc)}`).join('<br>')}</div>` : ''}
+    <div class="campo"><span class="lbl">Nota (opcional)</span><input class="in" id="bcNota" placeholder="Ej: era una copia del Cajón 13"></div>
+    <label class="fila" style="margin-top:10px;cursor:pointer;gap:6px"><input type="checkbox" id="bcOk" onchange="document.getElementById('bcBtn').disabled=!this.checked"> Sí, borrar el cajón y sus ${it.length} artículos</label>
+    <div class="fila" style="margin-top:14px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn rojo" id="bcBtn" disabled data-c="${esc(nombre)}" onclick="borrarCajonEntero(this.dataset.c)">Borrar cajón</button></div>`);
+}
+async function borrarCajonEntero(nombre) {
+  const nota = document.getElementById('bcNota').value.trim();
+  const it = S.sobre.filter(x => x.cajon === nombre);
+  cerrarModal(); escribiendo++;
+  const t0 = avisoFijo('Borrando ' + nombre + '…');
+  let r = await enviarOp({ tipo: 'eliminarCajon', nombre, conArticulos: true, nota }).catch(e => ({ error: e.message }));
+  t0.remove();
+  if (r && r.error && /Eliminá los artículos primero/.test(r.error)) {
+    // servidor anterior: se sacan los artículos de a uno y después el cajón
+    const t = avisoFijo(`Borrando ${it.length} artículos de ${nombre}…`);
+    try {
+      for (const x of it) await enviarOp({ tipo: 'eliminarItem', cajon: x.cajon, codigo: x.cod, nota: nota || 'Se borró el cajón entero' });
+      r = await enviarOp({ tipo: 'eliminarCajon', nombre, nota });
+    } catch (e) { r = { error: e.message }; } finally { t.remove(); }
+  }
+  escribiendo--;
+  if (!r || r.error) { aviso('❌ No se pudo borrar el cajón: ' + ((r && r.error) || 'sin respuesta') + '. Lo que se alcanzó a borrar quedó en el Historial.', 'err'); indexarSobre(); pintar(); return; }
+  cajonSel = ''; indexarSobre(); ir('sobre');
+  aviso(`${nombre} borrado (${it.length} artículos)`, 'ok');
 }
 
 // ============ Armar pedido: pegar códigos y cantidades → dónde está y si alcanza ============
@@ -2760,7 +2793,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-20 15:21';
+const VERSION_APP = '2026-10-20 17:04';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));

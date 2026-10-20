@@ -138,7 +138,7 @@ function listaSobre() {
   let it = S.sobre;
   if (cajonSel) it = it.filter(x => x.cajon === cajonSel);
   if (q) it = it.filter(x => normalizar(x.cod + ' ' + x.ubic + ' ' + x.cajon).includes(q));
-  el.innerHTML = `<div class="fila" style="margin-bottom:10px"><button class="btn chico" onclick="cajonSel='';qSobre='';ir('sobre')">← Todos los cajones</button>${cajonSel ? `<span class="chip on">${esc(cajonSel)}</span><button class="btn chico" style="margin-left:auto" onclick="pdfCajones([cajonSel])">🖨 PDF de este cajón</button>` : ''}</div>
+  el.innerHTML = `<div class="fila" style="margin-bottom:10px"><button class="btn chico" onclick="cajonSel='';qSobre='';ir('sobre')">← Todos los cajones</button>${cajonSel ? `<span class="chip on">${esc(cajonSel)}</span><button class="btn chico" style="margin-left:auto" onclick="pdfCajones([cajonSel])">🖨 PDF de este cajón</button><button class="btn chico rojo" onclick="formBorrarCajon(cajonSel)">🗑 Borrar cajón entero</button>` : ''}</div>
   <div class="panel tabla-scroll">${it.length ? `<table class="t"><tr><th>Código</th><th>Descripción</th><th>Cajón</th><th>Ubicación</th><th class="der">Cantidad</th><th>Nota del cambio (opcional)</th><th></th></tr>
   ${it.slice(0, 200).map(x => `<tr><td class="num" style="color:var(--amber)">${esc(x.cod)}</td><td>${esc(infoArticulo(x.cod).desc)}</td><td>${esc(x.cajon)}</td>
     <td><input class="in" id="su_${x.id}" value="${esc(x.ubic)}" style="width:100px"></td>

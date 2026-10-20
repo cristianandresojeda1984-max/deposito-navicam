@@ -118,3 +118,36 @@ function pdfReponer() {
   pieDePagina(doc, 'Reponer en estantería · impreso el ' + fecha);
   doc.save('Reponer en estanteria ' + fecha.replace(/\//g, '-') + '.pdf');
 }
+
+// --- borrar un cajón entero (con todo lo que tiene adentro)
+function formBorrarCajon(nombre) {
+  const it = S.sobre.filter(x => x.cajon === nombre);
+  const u = it.reduce((a, x) => a + x.cant, 0);
+  abrirModal(`<h3 style="margin-top:0;color:var(--red)">Borrar ${esc(nombre)} entero</h3>
+    <p style="margin-top:0">Se borra el cajón con sus <b>${it.length} artículos (${u} unidades)</b> del sobre stock. El stock total no cambia. Queda anotado en el Historial con el detalle de lo que tenía.</p>
+    ${it.length ? `<div class="muted" style="font-size:12px;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:10px">${it.map(x => `${esc(x.cod)} · ${x.cant} u. · ${esc(infoArticulo(x.cod).desc)}`).join('<br>')}</div>` : ''}
+    <div class="campo"><span class="lbl">Nota (opcional)</span><input class="in" id="bcNota" placeholder="Ej: era una copia del Cajón 13"></div>
+    <label class="fila" style="margin-top:10px;cursor:pointer;gap:6px"><input type="checkbox" id="bcOk" onchange="document.getElementById('bcBtn').disabled=!this.checked"> Sí, borrar el cajón y sus ${it.length} artículos</label>
+    <div class="fila" style="margin-top:14px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn rojo" id="bcBtn" disabled data-c="${esc(nombre)}" onclick="borrarCajonEntero(this.dataset.c)">Borrar cajón</button></div>`);
+}
+async function borrarCajonEntero(nombre) {
+  const nota = document.getElementById('bcNota').value.trim();
+  const it = S.sobre.filter(x => x.cajon === nombre);
+  cerrarModal(); escribiendo++;
+  const t0 = avisoFijo('Borrando ' + nombre + '…');
+  let r = await enviarOp({ tipo: 'eliminarCajon', nombre, conArticulos: true, nota }).catch(e => ({ error: e.message }));
+  t0.remove();
+  if (r && r.error && /Eliminá los artículos primero/.test(r.error)) {
+    // servidor anterior: se sacan los artículos de a uno y después el cajón
+    const t = avisoFijo(`Borrando ${it.length} artículos de ${nombre}…`);
+    try {
+      for (const x of it) await enviarOp({ tipo: 'eliminarItem', cajon: x.cajon, codigo: x.cod, nota: nota || 'Se borró el cajón entero' });
+      r = await enviarOp({ tipo: 'eliminarCajon', nombre, nota });
+    } catch (e) { r = { error: e.message }; } finally { t.remove(); }
+  }
+  escribiendo--;
+  if (!r || r.error) { aviso('❌ No se pudo borrar el cajón: ' + ((r && r.error) || 'sin respuesta') + '. Lo que se alcanzó a borrar quedó en el Historial.', 'err'); indexarSobre(); pintar(); return; }
+  cajonSel = ''; indexarSobre(); ir('sobre');
+  aviso(`${nombre} borrado (${it.length} artículos)`, 'ok');
+}
