@@ -21,18 +21,28 @@ function paraReponer() {
   });
   return out.sort((a, b) => a.estanteria - b.estanteria || String(a.ubicEst).localeCompare(String(b.ubicEst)));
 }
+// Un renglón por cajón y artículo, ordenado por número de cajón (para recorrer los cajones en orden) y después por ubicación
+function reponerPorCajon() {
+  const nro = c => { const m = String(c || '').match(/(\d+)\s*$/); return m ? Number(m[1]) : 9999; };
+  const filas = [];
+  paraReponer().forEach(r => r.items.forEach(x => filas.push({ r, x })));
+  return filas.sort((a, b) => nro(a.x.cajon) - nro(b.x.cajon) || a.x.cajon.localeCompare(b.x.cajon) || String(a.r.ubicEst).localeCompare(String(b.r.ubicEst), 'es', { numeric: true }) || a.r.cod.localeCompare(b.r.cod));
+}
 function panelReponer() {
   const l = paraReponer();
   if (!l.length) return '';
+  const filas = reponerPorCajon(); let cajonAnt = null;
+  const quedan = r => `<span class="tag ${r.estanteria <= 0 ? 't-red' : 't-amber'}">${r.estanteria <= 0 ? 'ninguno' : '1'}</span>${r.estanteria < 0 ? '<div class="muted" style="font-size:11px">el stock dice menos que el sobre stock</div>' : ''}`;
   return `<div class="panel" style="margin-bottom:14px;border-color:var(--amber)">
     <div class="fila" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">⚠ Reponer en estantería <span class="tag t-amber">${l.length}</span></h3>
       <button class="btn chico" onclick="pdfReponer()">🖨 PDF para llevar al depósito</button></div>
-    <div class="muted" style="font-size:12px;margin-bottom:8px">En la estantería queda 1 o ninguno: hay que sacar del sobre stock y guardar en la estantería. Cuando lo pasen, tocá “Pasé a estantería” y se descuenta del cajón.</div>
-    <div class="tabla-scroll" style="max-height:340px;overflow:auto"><table class="t"><tr><th>Código</th><th>Descripción</th><th>Estantería</th><th class="der">Quedan</th><th>Está en</th><th></th></tr>
-    ${l.map(r => r.items.map((x, k) => `<tr>${k === 0 ? `<td rowspan="${r.items.length}" class="num" style="color:var(--amber)">${esc(r.cod)}</td><td rowspan="${r.items.length}">${esc(r.desc)}</td><td rowspan="${r.items.length}">${esc(r.ubicEst)}</td>
-        <td rowspan="${r.items.length}" class="der"><span class="tag ${r.estanteria <= 0 ? 't-red' : 't-amber'}">${r.estanteria <= 0 ? 'ninguno' : '1'}</span>${r.estanteria < 0 ? '<div class="muted" style="font-size:11px">el stock dice menos que el sobre stock</div>' : ''}</td>` : ''}
-        <td>${esc(x.cajon)} · <b>${x.cant} u.</b></td>
-        <td><button class="btn chico azul" onclick="formReponer('${x.id}')">Pasé a estantería</button></td></tr>`).join('')).join('')}</table></div></div>`;
+    <div class="muted" style="font-size:12px;margin-bottom:8px">En la estantería queda 1 o ninguno. Ordenado por cajón, de menor a mayor: abrís cada cajón una sola vez. Cuando lo pasen, tocá “Pasé a estantería” y se descuenta del cajón.</div>
+    <div class="tabla-scroll" style="max-height:420px;overflow:auto"><table class="t"><tr><th>Código</th><th>Descripción</th><th class="der">En el cajón</th><th>Va a estantería</th><th>Quedan</th><th></th></tr>
+    ${filas.map(({ r, x }) => {
+      const cab = x.cajon !== cajonAnt ? (cajonAnt = x.cajon, `<tr><td colspan="6" style="background:#1a2540;font-weight:700;color:var(--amber);padding-top:10px">${esc(x.cajon)} <span class="muted" style="font-weight:400">· ${((n) => n + (n === 1 ? ' artículo' : ' artículos'))(filas.filter(f => f.x.cajon === x.cajon).length)}</span></td></tr>`) : '';
+      return cab + `<tr><td class="num" style="color:var(--amber)">${esc(r.cod)}</td><td>${esc(r.desc)}</td><td class="der"><b>${x.cant} u.</b></td><td>${esc(r.ubicEst)}</td><td>${quedan(r)}</td>
+        <td><button class="btn chico azul" onclick="formReponer('${x.id}')">Pasé a estantería</button></td></tr>`;
+    }).join('')}</table></div></div>`;
 }
 function formReponer(id) {
   const x = S.sobre.find(y => y.id === id); if (!x) return;
@@ -93,15 +103,17 @@ function pdfReponer() {
   const doc = pdfBase(); const W = doc.internal.pageSize.getWidth(); const fecha = new Date().toLocaleDateString('es-AR');
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90); doc.text('SOBRE STOCK · ' + (S.ajustes.empresa || 'Navicam'), 40, 46); doc.text(fecha, W - 40, 46, { align: 'right' });
   doc.setFont('helvetica', 'bold'); doc.setFontSize(24); doc.setTextColor(10); doc.text('Reponer en estantería', 40, 80);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(70); doc.text(`${l.length} artículos con 1 o ninguno en la estantería · sacar del cajón y guardar`, 40, 100);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(70); doc.text(`${l.length} artículos con 1 o ninguno en la estantería · ordenado por cajón · sacar y guardar`, 40, 100);
   doc.setDrawColor(20); doc.setLineWidth(1.2); doc.line(40, 110, W - 40, 110);
-  const body = [];
-  l.forEach(r => r.items.forEach(x => body.push([r.cod, r.desc || '', r.ubicEst || '-', r.estanteria <= 0 ? '0' : '1', x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '), String(x.cant), ''])));
+  const body = reponerPorCajon().map(({ r, x }) => [x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '), r.cod, r.desc || '', String(x.cant), r.ubicEst || '-', r.estanteria <= 0 ? '0' : '1', '']);
   doc.autoTable(Object.assign({}, ESTILO_TABLA, {
     startY: 122, styles: Object.assign({}, ESTILO_TABLA.styles, { fontSize: 10 }),
-    head: [['Código', 'Descripción', 'Estantería', 'Quedan', 'Cajón', 'En cajón', 'Pasé']],
+    head: [['Cajón', 'Código', 'Descripción', 'En cajón', 'Va a', 'Quedan', 'Pasé']],
     body,
-    columnStyles: { 0: { font: 'courier', fontStyle: 'bold', cellWidth: 88 }, 2: { cellWidth: 64, halign: 'center' }, 3: { cellWidth: 52, halign: 'center', fontStyle: 'bold' }, 4: { cellWidth: 62 }, 5: { cellWidth: 48, halign: 'center', fontStyle: 'bold' }, 6: { cellWidth: 36 } }
+    columnStyles: { 0: { cellWidth: 58, fontStyle: 'bold' }, 1: { font: 'courier', fontStyle: 'bold', cellWidth: 86 }, 3: { cellWidth: 48, halign: 'center', fontStyle: 'bold' }, 4: { cellWidth: 64, halign: 'center' }, 5: { cellWidth: 50, halign: 'center' }, 6: { cellWidth: 40 } },
+    // cada cajón con su color de fondo (alternado), para ver dónde empieza y termina
+    alternateRowStyles: {},
+    didParseCell: d => { if (d.section === 'body') { let g = 0; for (let i = 1; i <= d.row.index; i++) if (body[i][0] !== body[i - 1][0]) g++; d.cell.styles.fillColor = g % 2 ? [236, 236, 236] : [255, 255, 255]; } }
   }));
   pieDePagina(doc, 'Reponer en estantería · impreso el ' + fecha);
   doc.save('Reponer en estanteria ' + fecha.replace(/\//g, '-') + '.pdf');
