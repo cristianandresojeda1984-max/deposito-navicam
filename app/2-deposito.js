@@ -9,6 +9,7 @@ VISTAS.inicio = function () {
   main(`
   <div class="cab"><div><h1>Inicio</h1><p>${hoy.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p></div>
     <div class="acciones"><button class="btn pri" onclick="nuevoPresupuesto()">＋ Nuevo presupuesto</button></div></div>
+  ${(() => { const n = paraReponer().length; return n ? `<div class="panel click" onclick="ir('sobre')" style="cursor:pointer;margin-bottom:14px;border-color:var(--amber)"><b>⚠ Reponer en estantería:</b> ${n} artículo${n > 1 ? 's' : ''} con 1 o ninguno en la estantería. <span class="muted">Tocá para ver qué sacar del sobre stock.</span></div>` : ''; })()}
   <div class="muted" style="margin-bottom:8px;font-weight:600">Seguimiento de presupuestos</div>
   <div class="grid g4">
     ${tarjeta('vigentes', 'Presupuestos vigentes', '', 'dentro de la validez')}
@@ -117,7 +118,9 @@ let cajonSel = '', qSobre = '';
 VISTAS.sobre = function () {
   main(`<div class="cab"><div><h1>Sobre stock</h1><p>${S.sobre.length} artículos en ${S.cajones.length} cajones</p></div>
     <div class="acciones"><button class="btn" onclick="formCajon()">＋ Nuevo cajón</button><button class="btn pri" onclick="formArticuloSobre()">＋ Agregar artículo</button>
+    <button class="btn" onclick="pdfCajones(S.cajones)" title="Un cajón por hoja, para imprimir">🖨 PDF de todos los cajones</button>
     <button class="btn" onclick="exportarSobre()">⬇ Exportar Excel</button></div></div>
+    ${panelReponer()}
     <input class="in" placeholder="🔍 Buscar código, ubicación o cajón…" value="${esc(qSobre)}" oninput="qSobre=this.value;listaSobre()" style="margin-bottom:14px">
     <div id="listaSobre"></div>`);
   listaSobre();
@@ -135,7 +138,7 @@ function listaSobre() {
   let it = S.sobre;
   if (cajonSel) it = it.filter(x => x.cajon === cajonSel);
   if (q) it = it.filter(x => normalizar(x.cod + ' ' + x.ubic + ' ' + x.cajon).includes(q));
-  el.innerHTML = `<div class="fila" style="margin-bottom:10px"><button class="btn chico" onclick="cajonSel='';qSobre='';ir('sobre')">← Todos los cajones</button>${cajonSel ? `<span class="chip on">${esc(cajonSel)}</span>` : ''}</div>
+  el.innerHTML = `<div class="fila" style="margin-bottom:10px"><button class="btn chico" onclick="cajonSel='';qSobre='';ir('sobre')">← Todos los cajones</button>${cajonSel ? `<span class="chip on">${esc(cajonSel)}</span><button class="btn chico" style="margin-left:auto" onclick="pdfCajones([cajonSel])">🖨 PDF de este cajón</button>` : ''}</div>
   <div class="panel tabla-scroll">${it.length ? `<table class="t"><tr><th>Código</th><th>Descripción</th><th>Cajón</th><th>Ubicación</th><th class="der">Cantidad</th><th>Nota del cambio (opcional)</th><th></th></tr>
   ${it.slice(0, 200).map(x => `<tr><td class="num" style="color:var(--amber)">${esc(x.cod)}</td><td>${esc(infoArticulo(x.cod).desc)}</td><td>${esc(x.cajon)}</td>
     <td><input class="in" id="su_${x.id}" value="${esc(x.ubic)}" style="width:100px"></td>
