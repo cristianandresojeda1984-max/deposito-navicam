@@ -1,6 +1,6 @@
 // ============ Armar pedido: pegar códigos y cantidades → dónde está y si alcanza ============
 // Es un informe del momento (no se guarda). Stock total = el del Excel (incluye el sobre stock); estantería = total − sobre stock.
-const pedido = { cliente: '', codigos: '', cantidades: '', filas: [], orden: 'ubic', armado: false };
+const pedido = { cliente: '', codigos: '', cantidades: '', filas: [], orden: 'ubic', dir: 'asc', armado: false };
 
 VISTAS.pedido = function () {
   main(`<div class="cab"><div><h1>Armar pedido</h1><p>Pegá la columna de códigos y la de cantidades del Excel: te dice dónde está cada cosa y si alcanza.</p></div>
@@ -67,11 +67,25 @@ function calcFilaPedido(f) {
   return Object.assign({}, f, { desc: a.desc, ubic: a.ubic && a.ubic !== '-' ? a.ubic : '', total, enSobre, cajones, estanteria, estado, falta: Math.max(0, f.cant - disp), reemplazo: S.reemplazos[f.cod] || '' });
 }
 const EST_PED = { ok: ['✔ Alcanza', 't-green'], parcial: ['⚠ Parcial', 't-amber'], sin: ['✖ Sin stock', 't-red'], noexiste: ['? No existe', 't-gris'] };
+// Orden: tocando el encabezado de cada columna (otra vez = al revés). 'ubic' y 'orig' son los atajos de arriba.
+const nroCajon = c => { const m = String(c || '').match(/(\d+)\s*$/); return m ? Number(m[1]) : 9999; };
+const CLAVE_PED = {
+  cod: f => f.cod, desc: f => f.desc || '', cant: f => f.cant, total: f => f.total === null ? -1 : f.total,
+  sobre: f => f.cajones.length ? nroCajon(f.cajones[0].cajon) : null, ubic: f => f.ubic || null,
+  estante: f => f.estanteria === null ? -1 : f.estanteria, estado: f => ({ ok: 0, parcial: 1, sin: 2, noexiste: 3 }[f.estado]), orig: f => f.orden
+};
+function ordenarPedido(col) {
+  if (pedido.orden === col) pedido.dir = pedido.dir === 'desc' ? 'asc' : 'desc'; else { pedido.orden = col; pedido.dir = 'asc'; }
+  pintar();
+}
 function filasPedidoOrdenadas() {
-  const l = pedido.filas.slice();
-  if (pedido.orden === 'ubic') l.sort((a, b) => (!a.ubic) - (!b.ubic) || String(a.ubic).localeCompare(String(b.ubic), 'es', { numeric: true }) || a.orden - b.orden);
-  else l.sort((a, b) => a.orden - b.orden);
-  return l;
+  const k = CLAVE_PED[pedido.orden] || CLAVE_PED.orig, s = pedido.dir === 'desc' ? -1 : 1;
+  return pedido.filas.slice().sort((a, b) => {
+    const x = k(a), y = k(b);
+    if (x === null && y !== null) return 1; if (y === null && x !== null) return -1;   // los vacíos siempre al final
+    const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x ?? '').localeCompare(String(y ?? ''), 'es', { numeric: true });
+    return c * s || a.orden - b.orden;
+  });
 }
 function informePedido() {
   const l = filasPedidoOrdenadas();
@@ -83,9 +97,11 @@ function informePedido() {
       <div class="panel kpi" ${n('parcial') ? 'style="border-color:var(--amber)"' : ''}><small>Parciales</small><b>${n('parcial')}</b><span>hay algo, falta el resto</span></div>
       <div class="panel kpi" ${n('sin') + n('noexiste') ? 'style="border-color:var(--red)"' : ''}><small>Sin stock / no existen</small><b>${n('sin') + n('noexiste')}</b><span>${n('noexiste') ? n('noexiste') + ' código' + (n('noexiste') > 1 ? 's' : '') + ' no existe' + (n('noexiste') > 1 ? 'n' : '') : 'no hay nada'}</span></div></div>
     <div class="fila" style="margin-bottom:10px">
-      <span class="muted">Ordenar:</span><button class="chip ${pedido.orden === 'ubic' ? 'on' : ''}" onclick="pedido.orden='ubic';pintar()">Por ubicación (para recorrer)</button><button class="chip ${pedido.orden === 'orig' ? 'on' : ''}" onclick="pedido.orden='orig';pintar()">Como lo pegué</button>
+      <span class="muted">Ordenar:</span><button class="chip ${pedido.orden === 'ubic' ? 'on' : ''}" onclick="pedido.orden='ubic';pedido.dir='asc';pintar()">Por ubicación (para recorrer)</button><button class="chip ${pedido.orden === 'sobre' ? 'on' : ''}" onclick="pedido.orden='sobre';pedido.dir='asc';pintar()">Por cajón</button><button class="chip ${pedido.orden === 'orig' ? 'on' : ''}" onclick="pedido.orden='orig';pedido.dir='asc';pintar()">Como lo pegué</button>
+      <span class="muted" style="font-size:12px">o tocá el título de una columna</span>
       <span style="margin-left:auto" class="fila"><button class="btn" onclick="pdfPedido()">🖨 PDF para armar</button><button class="btn" onclick="excelFaltantes()" ${n('parcial') + n('sin') + n('noexiste') ? '' : 'disabled'}>⬇ Excel de faltantes</button><button class="btn azul" onclick="pedidoACotizador()">Pasar al cotizador</button></span></div>
-    <div class="panel tabla-scroll"><table class="t"><tr><th>Código</th><th>Descripción</th><th class="der">Pedido</th><th class="der">Stock total</th><th>En sobre stock</th><th>En estantería</th><th>Estado</th></tr>
+    <div class="panel tabla-scroll"><table class="t"><tr>${[['cod', 'Código'], ['desc', 'Descripción'], ['cant', 'Pedido', 'der'], ['total', 'Stock total', 'der'], ['sobre', 'En sobre stock'], ['ubic', 'En estantería'], ['estado', 'Estado']]
+      .map(([k, t, c]) => `<th class="${c || ''}" style="cursor:pointer;user-select:none;white-space:nowrap${pedido.orden === k ? ';color:var(--amber)' : ''}" title="Ordenar por ${t.toLowerCase()} (tocá de nuevo para invertir)" onclick="ordenarPedido('${k}')">${t} ${pedido.orden === k ? (pedido.dir === 'desc' ? '▼' : '▲') : '<span style="opacity:.35">↕</span>'}</th>`).join('')}</tr>
     ${l.map(f => `<tr><td class="num" style="color:var(--amber)">${esc(f.cod)}${f.veces > 1 ? `<div class="muted" style="font-size:11px">sumado de ${f.veces} renglones</div>` : ''}</td>
       <td>${esc(f.desc || '')}${f.reemplazo ? `<div><span class="tag t-amber">Tiene reemplazo: ${esc(f.reemplazo)}</span></div>` : ''}</td>
       <td class="der num"><b>${num(f.cant)}</b></td>
