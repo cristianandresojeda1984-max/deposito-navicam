@@ -161,6 +161,10 @@ table.t tr.sel td{background:#172744}
 .btnAct.girando{animation:girar 1s linear infinite;pointer-events:none}
 @keyframes girar{to{transform:rotate(360deg)}}
 
+.link-cajon{display:block;font-size:12px;color:var(--blue,#7cb4ff);text-decoration:none;padding:6px 0;line-height:1.3}
+.link-cajon:hover{text-decoration:underline}
+tr.fila-marcada td{background:rgba(245,180,40,.18)!important;transition:background .4s}
+
 </style>
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
@@ -192,7 +196,7 @@ table.t tr.sel td{background:#172744}
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-21 09:01</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-21 11:30</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -569,7 +573,7 @@ function tarjetaArticulo(cod) {
       <div><small>Stock depósito</small><b>${a.stock === null ? '—' : esc(a.stock)}</b></div>
       <div><small>Ubicación</small><b>${esc(a.ubic || '—')}</b></div>
       <div><small>Precio lista (USD ${fmt(a.usd)})</small><b class="num">${a.usd ? masIva(a.usd * S.dolar) : 'Consultar'}</b></div>
-      <div><small>Sobre stock</small><b>${a.sobre ? a.sobre + ' u.' : '—'}</b>${a.sobreDet.map(x => `<div class="muted" style="font-size:11px">${esc(x.cajon)} · ${x.cant} u.</div>`).join('')}</div>
+      <div><small>Sobre stock</small><b>${a.sobre ? a.sobre + ' u.' : '—'}</b>${a.sobreDet.map(x => `<a href="#" class="link-cajon" data-c="${esc(x.cajon)}" data-cod="${esc(x.cod)}" onclick="abrirCajon(this.dataset.c,this.dataset.cod);return false" title="Abrir el cajón para editar">${esc(x.cajon)} · ${x.cant} u. ›</a>`).join('')}</div>
     </div>
     ${a.stock !== null ? `<div class="fila" style="margin-top:10px"><span class="muted">Cambiar ubicación:</span><input class="in" id="ub_${idc}" value="${esc(a.ubic)}" style="max-width:150px">
       <input class="in" id="nu_${idc}" placeholder="Nota del cambio (opcional)" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')cambiarUbicacion('${esc(cod)}','ub_${idc}','nu_${idc}')"><button class="btn chico" onclick="cambiarUbicacion('${esc(cod)}','ub_${idc}','nu_${idc}')">Guardar</button></div>` : ''}
@@ -636,6 +640,18 @@ function listaSobre() {
     <td class="der"><input class="in" id="sc_${x.id}" type="number" value="${x.cant}" style="width:76px;text-align:right"></td>
     <td><input class="in" id="sn_${x.id}" placeholder="Ej: conté de nuevo" style="min-width:160px" onkeydown="if(event.key==='Enter')guardarSobreFila('${x.id}')"></td>
     <td class="der" style="white-space:nowrap"><button class="btn chico" onclick="guardarSobreFila('${x.id}')">Guardar</button> <button class="btn chico rojo" onclick="eliminarSobre('${x.id}')">🗑</button></td></tr>`).join('')}</table>` : '<div class="vacio">Sin artículos.</div>'}</div>`;
+}
+// Abre un cajón del sobre stock y marca el artículo (desde Depósito, Armar pedido, etc.)
+function abrirCajon(cajon, cod) {
+  cajonSel = cajon; qSobre = ''; ir('sobre');
+  if (!cod) return;
+  setTimeout(() => {
+    const x = S.sobre.find(y => y.cajon === cajon && y.cod === cod); if (!x) return;
+    const inp = document.getElementById('sc_' + x.id); if (!inp) return;
+    const tr = inp.closest('tr'); tr.classList.add('fila-marcada');
+    inp.focus({ preventScroll: true }); inp.select(); const sc = tr.closest('.tabla-scroll'); if (sc) sc.scrollLeft = 0; tr.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    setTimeout(() => tr.classList.remove('fila-marcada'), 4000);
+  }, 60);
 }
 function formCajon() {
   const n = S.cajones.length + 1;
@@ -1058,7 +1074,7 @@ function informePedido() {
       <td>${esc(f.desc || '')}${f.reemplazo ? `<div><span class="tag t-amber">Tiene reemplazo: ${esc(f.reemplazo)}</span></div>` : ''}</td>
       <td class="der num"><b>${num(f.cant)}</b></td>
       <td class="der num">${num(f.total)}</td>
-      <td style="font-size:13px">${f.cajones.length ? f.cajones.map(x => `${esc(x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))} · <b>${x.cant} u.</b>`).join('<br>') : '<span class="muted">—</span>'}</td>
+      <td style="font-size:13px">${f.cajones.length ? f.cajones.map(x => `<a href="#" class="link-cajon" style="display:inline;padding:0" data-c="${esc(x.cajon)}" data-cod="${esc(f.cod)}" onclick="abrirCajon(this.dataset.c,this.dataset.cod);return false">${esc(x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))} · <b>${x.cant} u.</b></a>`).join('<br>') : '<span class="muted">—</span>'}</td>
       <td style="font-size:13px">${f.estanteria === null ? '<span class="muted">—</span>' : `<b>${num(Math.max(0, f.estanteria))} u.</b>${f.ubic ? ' · ' + esc(f.ubic) : ''}`}</td>
       <td><span class="tag ${EST_PED[f.estado][1]}">${EST_PED[f.estado][0]}</span>${f.estado === 'parcial' ? `<div class="muted" style="font-size:12px">falta${f.falta > 1 ? 'n' : ''} ${num(f.falta)}</div>` : ''}</td></tr>`).join('')}</table></div>`;
 }
@@ -2800,7 +2816,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-21 09:01';
+const VERSION_APP = '2026-10-21 11:30';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));

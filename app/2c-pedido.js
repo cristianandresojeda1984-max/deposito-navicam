@@ -106,7 +106,7 @@ function informePedido() {
       <td>${esc(f.desc || '')}${f.reemplazo ? `<div><span class="tag t-amber">Tiene reemplazo: ${esc(f.reemplazo)}</span></div>` : ''}</td>
       <td class="der num"><b>${num(f.cant)}</b></td>
       <td class="der num">${num(f.total)}</td>
-      <td style="font-size:13px">${f.cajones.length ? f.cajones.map(x => `${esc(x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))} · <b>${x.cant} u.</b>`).join('<br>') : '<span class="muted">—</span>'}</td>
+      <td style="font-size:13px">${f.cajones.length ? f.cajones.map(x => `<a href="#" class="link-cajon" style="display:inline;padding:0" data-c="${esc(x.cajon)}" data-cod="${esc(f.cod)}" onclick="abrirCajon(this.dataset.c,this.dataset.cod);return false">${esc(x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))} · <b>${x.cant} u.</b></a>`).join('<br>') : '<span class="muted">—</span>'}</td>
       <td style="font-size:13px">${f.estanteria === null ? '<span class="muted">—</span>' : `<b>${num(Math.max(0, f.estanteria))} u.</b>${f.ubic ? ' · ' + esc(f.ubic) : ''}`}</td>
       <td><span class="tag ${EST_PED[f.estado][1]}">${EST_PED[f.estado][0]}</span>${f.estado === 'parcial' ? `<div class="muted" style="font-size:12px">falta${f.falta > 1 ? 'n' : ''} ${num(f.falta)}</div>` : ''}</td></tr>`).join('')}</table></div>`;
 }

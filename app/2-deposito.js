@@ -78,7 +78,7 @@ function tarjetaArticulo(cod) {
       <div><small>Stock depósito</small><b>${a.stock === null ? '—' : esc(a.stock)}</b></div>
       <div><small>Ubicación</small><b>${esc(a.ubic || '—')}</b></div>
       <div><small>Precio lista (USD ${fmt(a.usd)})</small><b class="num">${a.usd ? masIva(a.usd * S.dolar) : 'Consultar'}</b></div>
-      <div><small>Sobre stock</small><b>${a.sobre ? a.sobre + ' u.' : '—'}</b>${a.sobreDet.map(x => `<div class="muted" style="font-size:11px">${esc(x.cajon)} · ${x.cant} u.</div>`).join('')}</div>
+      <div><small>Sobre stock</small><b>${a.sobre ? a.sobre + ' u.' : '—'}</b>${a.sobreDet.map(x => `<a href="#" class="link-cajon" data-c="${esc(x.cajon)}" data-cod="${esc(x.cod)}" onclick="abrirCajon(this.dataset.c,this.dataset.cod);return false" title="Abrir el cajón para editar">${esc(x.cajon)} · ${x.cant} u. ›</a>`).join('')}</div>
     </div>
     ${a.stock !== null ? `<div class="fila" style="margin-top:10px"><span class="muted">Cambiar ubicación:</span><input class="in" id="ub_${idc}" value="${esc(a.ubic)}" style="max-width:150px">
       <input class="in" id="nu_${idc}" placeholder="Nota del cambio (opcional)" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')cambiarUbicacion('${esc(cod)}','ub_${idc}','nu_${idc}')"><button class="btn chico" onclick="cambiarUbicacion('${esc(cod)}','ub_${idc}','nu_${idc}')">Guardar</button></div>` : ''}
@@ -145,6 +145,18 @@ function listaSobre() {
     <td class="der"><input class="in" id="sc_${x.id}" type="number" value="${x.cant}" style="width:76px;text-align:right"></td>
     <td><input class="in" id="sn_${x.id}" placeholder="Ej: conté de nuevo" style="min-width:160px" onkeydown="if(event.key==='Enter')guardarSobreFila('${x.id}')"></td>
     <td class="der" style="white-space:nowrap"><button class="btn chico" onclick="guardarSobreFila('${x.id}')">Guardar</button> <button class="btn chico rojo" onclick="eliminarSobre('${x.id}')">🗑</button></td></tr>`).join('')}</table>` : '<div class="vacio">Sin artículos.</div>'}</div>`;
+}
+// Abre un cajón del sobre stock y marca el artículo (desde Depósito, Armar pedido, etc.)
+function abrirCajon(cajon, cod) {
+  cajonSel = cajon; qSobre = ''; ir('sobre');
+  if (!cod) return;
+  setTimeout(() => {
+    const x = S.sobre.find(y => y.cajon === cajon && y.cod === cod); if (!x) return;
+    const inp = document.getElementById('sc_' + x.id); if (!inp) return;
+    const tr = inp.closest('tr'); tr.classList.add('fila-marcada');
+    inp.focus({ preventScroll: true }); inp.select(); const sc = tr.closest('.tabla-scroll'); if (sc) sc.scrollLeft = 0; tr.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    setTimeout(() => tr.classList.remove('fila-marcada'), 4000);
+  }, 60);
 }
 function formCajon() {
   const n = S.cajones.length + 1;
