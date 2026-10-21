@@ -65,7 +65,7 @@ function bloqueTotales(t) {
 }
 function tablaBorrador(b, cli) {
   if (!b.items.length) return '<div class="vacio">Agregá artículos con el buscador o pegá una lista desde Excel.</div>';
-  return `<table class="t"><tr><th>Artículo</th><th>Marca</th><th class="der">Cant</th><th class="cen">D</th><th class="der">Lista + IVA</th><th class="der">Desc %</th><th class="der">Unitario + IVA</th><th class="der">Subtotal + IVA</th><th>Depósito y avisos</th><th></th></tr>
+  return `<table class="t"><tr><th style="width:26px">N.º</th><th>Artículo</th><th>Marca</th><th class="der">Cant</th><th class="cen">D</th><th class="der">Lista + IVA</th><th class="der">Desc %</th><th class="der">Unitario + IVA</th><th class="der">Subtotal + IVA</th><th>Depósito y avisos</th><th></th></tr>
   ${b.items.map((l, i) => {
     const a = infoArticulo(l.cod);
     const dc = descCliente(cli, l.D);
@@ -75,7 +75,7 @@ function tablaBorrador(b, cli) {
     const nx = S.nexpro[base.cod] || [];
     const sugerido = !l.reemplazaA && S.reemplazos[base.cod];
     const precioEditable = marca === 'OTRO' || marca === 'PROPIO' || (!l.usd && !l.listaManual) || (marca === 'NEXPRO' && !l.usd);
-    return `<tr>
+    return `<tr><td class="num muted" style="width:26px;text-align:right;padding-right:6px">${i + 1}</td>
       <td style="min-width:230px"><span class="num" style="color:var(--amber);font-weight:600">${esc(l.cod)}</span>${marca === 'NEXPRO' && l.cod !== base.cod ? ` <span class="muted" style="font-size:11px">(Iveco ${esc(base.cod)})</span>` : ''}
         <div style="font-size:13px">${esc(l.desc)}</div>
         ${l.reemplazaA ? `<div><span class="tag t-violet">Reemplaza a ${esc(l.reemplazaA)}</span> <a href="#" style="font-size:11px" onclick="quitarReemplazo(${i});return false">quitar</a></div>`

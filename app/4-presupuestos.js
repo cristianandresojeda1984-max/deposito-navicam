@@ -80,6 +80,7 @@ function bloqueConfirmar(p) {
   return `<div style="font-weight:600;margin-bottom:8px">¿Qué se vendió? Marcá los ítems y ajustá la cantidad</div>
   <div class="muted" style="font-size:12px;margin:-4px 0 8px">Para cambiar cantidades, precios o artículos usá <b>✎ Modificar</b>. Para sacar un artículo del presupuesto, tocá 🗑.</div>
   <table class="t">${p.items.map((l, i) => `<tr>
+    <td class="num muted" style="width:22px;vertical-align:top;padding-top:13px;text-align:right">${i + 1}</td>
     <td style="width:28px;vertical-align:top;padding-top:12px"><input type="checkbox" ${conf.vend[i] > 0 ? 'checked' : ''} onchange="marcarItem(${i},this.checked)"></td>
     <td><span class="num" style="color:var(--amber)">${esc(l.cod)}</span> <span class="tag t-gris">${esc(marcaDe(l))}</span> <span class="num muted" style="font-size:12px">${plata(l.unit)} c/u + IVA</span><div style="font-size:12px" class="muted">${esc(l.desc)}${l.reemplazaA ? ' · reemplaza a ' + esc(l.reemplazaA) : ''}</div>
       ${conf.vend[i] < l.cant ? `<select class="in" style="margin-top:6px;max-width:240px;padding:5px 8px" onchange="conf.mot[${i}]=this.value">${opcionesMotivo(conf.mot[i])}</select>` : ''}</td>
@@ -96,7 +97,7 @@ function bloqueConfirmar(p) {
 function bloqueResultado(p) {
   const t = totales(p.items, 'vendido');
   return `<div style="font-weight:600;margin-bottom:8px">Resultado</div>
-  <table class="t">${p.items.map(l => `<tr><td><span class="num" style="color:var(--amber)">${esc(l.cod)}</span> <span class="tag t-gris">${esc(marcaDe(l))}</span><div style="font-size:12px" class="muted">${esc(l.desc)}${l.reemplazaA ? ' · reemplaza a ' + esc(l.reemplazaA) : ''}</div></td>
+  <table class="t">${p.items.map((l, i) => `<tr><td class="num muted" style="width:22px;text-align:right">${i + 1}</td><td><span class="num" style="color:var(--amber)">${esc(l.cod)}</span> <span class="tag t-gris">${esc(marcaDe(l))}</span><div style="font-size:12px" class="muted">${esc(l.desc)}${l.reemplazaA ? ' · reemplaza a ' + esc(l.reemplazaA) : ''}</div></td>
     <td class="der">${l.vendido || 0} de ${l.cant}</td>
     <td>${(l.vendido || 0) >= l.cant ? '<span class="tag t-green">vendido</span>' : `<span class="tag t-red">${(l.vendido || 0) ? 'parcial' : 'no vendido'}${l.motivo ? ' · ' + esc(l.motivo) : ''}</span>`}</td></tr>`).join('')}</table>
   <div class="fila" style="justify-content:space-between;margin-top:10px"><span>Total vendido</span><b class="num" style="font-size:17px">${masIva(t.sub)}</b></div>`;

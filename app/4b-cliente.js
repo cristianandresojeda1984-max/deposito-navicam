@@ -13,8 +13,8 @@ function hojaCliente(p) {
       <div><div class="gris" style="font-size:12px;text-transform:uppercase;letter-spacing:1px">Cliente</div><div style="font-size:18px;font-weight:700">${esc(p.clienteNombre)}</div>${cli.cuit ? `<div class="gris">CUIT ${esc(cli.cuit)}</div>` : ''}</div>
       <div style="text-align:right"><div class="gris" style="font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Sus descuentos por escala</div>
         <div style="display:flex;gap:6px;justify-content:flex-end">${['5', '6', '7', '8', '9'].map(d => `<span class="h-chip">D${d} <b>${esc(textoDesc(escala[d]))}</b></span>`).join('')}</div></div></div>
-    <table><tr><th>Código</th><th>Descripción</th><th>Marca</th><th class="r">Cant</th><th class="r">Precio lista</th><th class="r">Desc.</th><th class="r">Unitario + IVA</th><th class="r">Subtotal + IVA</th></tr>
-      ${p.items.map(l => `<tr><td style="font-family:Consolas,monospace">${esc(l.cod)}</td><td>${esc(l.desc)}${l.reemplazaA ? `<div style="font-size:11px;color:#6b4bb8">Reemplaza a ${esc(l.reemplazaA)}</div>` : ''}${verDispo(p) ? `<div style="font-size:11px;color:${textoDispo(l) === 'Inmediata' ? '#0f6b3d' : /sin abastecimiento/i.test(textoDispo(l)) ? '#b42318' : '#9a5b00'}">Disponibilidad: ${esc(textoDispo(l))}</div>` : ''}</td><td>${esc(marcaDe(l))}</td><td class="r">${l.cant}</td><td class="r">${fmt(l.listaArs)}</td>
+    <table><tr><th class="r" style="width:26px">N.º</th><th>Código</th><th>Descripción</th><th>Marca</th><th class="r">Cant</th><th class="r">Precio lista</th><th class="r">Desc.</th><th class="r">Unitario + IVA</th><th class="r">Subtotal + IVA</th></tr>
+      ${p.items.map((l, i) => `<tr><td class="r gris">${i + 1}</td><td style="font-family:Consolas,monospace">${esc(l.cod)}</td><td>${esc(l.desc)}${l.reemplazaA ? `<div style="font-size:11px;color:#6b4bb8">Reemplaza a ${esc(l.reemplazaA)}</div>` : ''}${verDispo(p) ? `<div style="font-size:11px;color:${textoDispo(l) === 'Inmediata' ? '#0f6b3d' : /sin abastecimiento/i.test(textoDispo(l)) ? '#b42318' : '#9a5b00'}">Disponibilidad: ${esc(textoDispo(l))}</div>` : ''}</td><td>${esc(marcaDe(l))}</td><td class="r">${l.cant}</td><td class="r">${fmt(l.listaArs)}</td>
         <td class="r ${l.descPct ? 'd' : 'gris'}">${pctTxt(l.descPct)}</td><td class="r">${fmt(l.unit)}</td><td class="r">${fmt(l.sub)}</td></tr>`).join('')}</table>
     <div style="display:flex;justify-content:space-between;gap:24px;align-items:flex-start">
       <div style="flex:1;font-size:13px;color:#4a5468;line-height:1.5">Todos los precios son en pesos <b style="color:#141a26">+ IVA</b>.${p.notas ? '<br><br><b style="color:#141a26">Observaciones:</b> ' + esc(p.notas) : ''}</div>
@@ -71,13 +71,13 @@ function pdfPresupuesto(p) {
   // tabla
   doc.autoTable({
     startY: 176, margin: { left: M, right: M },
-    head: [['Código', 'Descripción', 'Marca', 'Cant', 'Precio lista', 'Desc.', 'Unitario + IVA', 'Subtotal + IVA']],
-    body: p.items.map(l => [l.cod, l.desc + (l.reemplazaA ? '\nReemplaza a ' + l.reemplazaA : '') + (verDispo(p) ? '\nDisponibilidad: ' + textoDispo(l) : ''), marcaDe(l), String(l.cant), fmt(l.listaArs), pctTxt(l.descPct), fmt(l.unit), fmt(l.sub)]),
+    head: [['N.º', 'Código', 'Descripción', 'Marca', 'Cant', 'Precio lista', 'Desc.', 'Unitario + IVA', 'Subtotal + IVA']],
+    body: p.items.map((l, i) => [String(i + 1), l.cod, l.desc + (l.reemplazaA ? '\nReemplaza a ' + l.reemplazaA : '') + (verDispo(p) ? '\nDisponibilidad: ' + textoDispo(l) : ''), marcaDe(l), String(l.cant), fmt(l.listaArs), pctTxt(l.descPct), fmt(l.unit), fmt(l.sub)]),
     styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 5, textColor: tinta, lineColor: [221, 226, 234], lineWidth: { bottom: 0.6 } },
     headStyles: { fillColor: tinta, textColor: 255, fontStyle: 'bold', lineWidth: 0 },
-    columnStyles: { 0: { cellWidth: 66 }, 2: { cellWidth: 50 }, 3: { halign: 'right', cellWidth: 30 }, 4: { halign: 'right', cellWidth: 64 }, 5: { halign: 'right', cellWidth: 38 }, 6: { halign: 'right', cellWidth: 66 }, 7: { halign: 'right', cellWidth: 70 } },
-    didParseCell: d => { if (d.section === 'head' && d.column.index >= 3) d.cell.styles.halign = 'right';
-      if (d.section === 'body' && d.column.index === 5) { if (d.cell.raw !== '0%') { d.cell.styles.textColor = verde; d.cell.styles.fontStyle = 'bold'; } else d.cell.styles.textColor = gris; } },
+    columnStyles: { 0: { halign: 'right', cellWidth: 22, textColor: gris }, 1: { cellWidth: 62 }, 3: { cellWidth: 46 }, 4: { halign: 'right', cellWidth: 28 }, 5: { halign: 'right', cellWidth: 62 }, 6: { halign: 'right', cellWidth: 36 }, 7: { halign: 'right', cellWidth: 64 }, 8: { halign: 'right', cellWidth: 68 } },
+    didParseCell: d => { if (d.section === 'head' && (d.column.index >= 4 || d.column.index === 0)) d.cell.styles.halign = 'right';
+      if (d.section === 'body' && d.column.index === 6) { if (d.cell.raw !== '0%') { d.cell.styles.textColor = verde; d.cell.styles.fontStyle = 'bold'; } else d.cell.styles.textColor = gris; } },
     alternateRowStyles: { fillColor: [255, 255, 255] }
   });
   let y = doc.lastAutoTable.finalY + 22;
@@ -143,11 +143,11 @@ function descargarYAbrirWa() {
 function exportarPresupuesto(p) {
   const t = totales(p.items);
   const filas = [['Presupuesto', p.borrador ? '(sin guardar)' : numPresu(p)], ['Cliente', p.clienteNombre], ['Fecha', fechaAR(p.fecha)], ['Válido hasta', fechaAR(p.hasta)], ['Precios en pesos + IVA'], [],
-    ['Código', 'Descripción', 'Marca', 'Reemplaza a', 'Cant', 'Precio lista', 'Desc %', 'Unitario + IVA', 'Subtotal + IVA'].concat(verDispo(p) ? ['Disponibilidad'] : [])];
-  p.items.forEach(l => filas.push([valorCelda(l.cod), l.desc, marcaDe(l), l.reemplazaA ? valorCelda(l.reemplazaA) : '', l.cant, l.listaArs, l.descPct, l.unit, l.sub].concat(verDispo(p) ? [textoDispo(l)] : [])));
-  filas.push([], ['', '', '', '', '', '', '', 'Total a precio de lista', t.lista], ['', '', '', '', '', '', '', 'Su ahorro', -t.ahorro], ['', '', '', '', '', '', '', 'Total + IVA', t.sub]);
+    ['N.º', 'Código', 'Descripción', 'Marca', 'Reemplaza a', 'Cant', 'Precio lista', 'Desc %', 'Unitario + IVA', 'Subtotal + IVA'].concat(verDispo(p) ? ['Disponibilidad'] : [])];
+  p.items.forEach((l, i) => filas.push([i + 1, valorCelda(l.cod), l.desc, marcaDe(l), l.reemplazaA ? valorCelda(l.reemplazaA) : '', l.cant, l.listaArs, l.descPct, l.unit, l.sub].concat(verDispo(p) ? [textoDispo(l)] : [])));
+  filas.push([], ['', '', '', '', '', '', '', '', 'Total a precio de lista', t.lista], ['', '', '', '', '', '', '', '', 'Su ahorro', -t.ahorro], ['', '', '', '', '', '', '', '', 'Total + IVA', t.sub]);
   if (p.notas) filas.push([], ['Observaciones', p.notas]);
-  const ws = XLSX.utils.aoa_to_sheet(filas); ws['!cols'] = [{ wch: 14 }, { wch: 42 }, { wch: 10 }, { wch: 14 }, { wch: 6 }, { wch: 14 }, { wch: 8 }, { wch: 22 }, { wch: 16 }];
+  const ws = XLSX.utils.aoa_to_sheet(filas); ws['!cols'] = [{ wch: 5 }, { wch: 14 }, { wch: 42 }, { wch: 10 }, { wch: 14 }, { wch: 6 }, { wch: 14 }, { wch: 8 }, { wch: 22 }, { wch: 16 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
   XLSX.writeFile(wb, nombrePdf(p).replace(/\.pdf$/, '.xlsx'));
 }
