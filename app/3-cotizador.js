@@ -146,7 +146,7 @@ async function ponerReemplazo(i, nuevo, pedido) {
   const viejo = pedido !== undefined && limpiarCodigo(pedido).length >= 2 ? limpiarCodigo(pedido) : (l.reemplazaA || baseDe(l).cod);
   if (nuevo === viejo) { aviso('Los dos códigos son iguales', 'err'); return; }
   if (!existeArticulo(nuevo) && !confirm(`${nuevo} no está en la lista ni en el stock. ¿Usarlo igual?`)) return;
-  l.reemplazaA = viejo; l.base = datosIveco(nuevo);
+  l.reemplazaA = viejo; l.base = datosIveco(nuevo); marcaSegunCodigo(l);
   aplicarMarca(l); recalcDesc(l, cliente(b.clienteId)); calcularLinea(l, b.dolar);
   guardar('borrador'); cerrarModal(); pintar();
   if (S.reemplazos[viejo] === nuevo) { aviso(`${viejo} reemplazado por ${nuevo}`, 'ok'); return; }
@@ -155,9 +155,16 @@ async function ponerReemplazo(i, nuevo, pedido) {
   S.reemplazos[viejo] = nuevo; ultimoReemp = viejo; guardar('reemplazos'); pintarSeguro();
   aviso(`Reemplazo guardado: ${viejo} → ${nuevo}`, 'ok');
 }
+// Al cambiar el código del renglón (reemplazo): si el nuevo es de Iveco toma su lista; si es un artículo propio, su precio
+function marcaSegunCodigo(l) {
+  const a = infoArticulo(baseDe(l).cod);
+  if (a.propio) { l.marca = 'PROPIO'; l.listaManual = a.precioArs || 0; l.manual = false; }
+  else if (l.marca === 'PROPIO') { l.marca = 'IVECO'; l.listaManual = 0; delete l.marcaTxt; l.manual = false; }
+  else if ((l.marca || 'IVECO') === 'IVECO') l.listaManual = 0;
+}
 function quitarReemplazo(i) {
   const b = B(); const l = b.items[i];
-  l.base = datosIveco(l.reemplazaA); delete l.reemplazaA;
+  l.base = datosIveco(l.reemplazaA); delete l.reemplazaA; marcaSegunCodigo(l);
   aplicarMarca(l); recalcDesc(l, cliente(b.clienteId)); calcularLinea(l, b.dolar); guardar('borrador'); pintar();
 }
 // Refresca precios de un renglón con la lista de hoy, respetando marca y reemplazo
