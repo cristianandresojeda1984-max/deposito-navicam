@@ -36,10 +36,10 @@ function dbBorrarTodo() {
 
 // ============ Estado ============
 const CLAVES = ['dolar', 'stock', 'precios', 'sobre', 'cajones', 'notas', 'ubicCambios', 'reposicionado', 'pedidoNegocio', 'promos',
-  'clientes', 'presupuestos', 'motivos', 'registro', 'ajustes', 'contador', 'borrador', 'archivos', 'agenda', 'avisados', 'versionDatos', 'nexpro', 'reemplazos', 'metas', 'propios'];
+  'clientes', 'presupuestos', 'motivos', 'registro', 'ajustes', 'contador', 'borrador', 'archivos', 'agenda', 'avisados', 'versionDatos', 'nexpro', 'reemplazos', 'metas', 'propios', 'pedidos'];
 const S = {
   dolar: 1520, stock: [], precios: {}, sobre: [], cajones: [], notas: {}, ubicCambios: {}, reposicionado: {}, pedidoNegocio: {}, promos: {},
-  clientes: [], presupuestos: [], motivos: [], registro: [], ajustes: {}, contador: 0, borrador: null, archivos: {}, agenda: [], avisados: {}, versionDatos: 1, nexpro: {}, reemplazos: {}, metas: {}, propios: {}
+  clientes: [], presupuestos: [], motivos: [], registro: [], ajustes: {}, contador: 0, borrador: null, archivos: {}, agenda: [], avisados: {}, versionDatos: 1, nexpro: {}, reemplazos: {}, metas: {}, propios: {}, pedidos: []
 };
 const MOTIVOS_BASE = ['Precio', 'Plazo de entrega', 'Sin stock', 'Lo compró en otro lado', 'Otro'];
 const CATEGORIAS = [
@@ -173,6 +173,7 @@ function infoArticulo(cod) {
   const sob = sobreIdx.get(cod) || [];
   // Artículo propio (no es de Iveco): lo cargaron ellos, con precio en pesos
   const pr = !p && !st ? S.propios[cod] : null;
+  const desc = st ? descuentoPedidos(cod) : 0;
   if (pr) return { cod, desc: pr.desc || '', usd: 0, D: '', enLista: false, propio: true, precioArs: Number(pr.precio) || 0, tipo: pr.tipo || '',
     stock: pr.stock === null || pr.stock === undefined || pr.stock === '' ? null : pr.stock, ubic: pr.ubic || '-',
     sobre: sob.reduce((a, x) => a + (x.cant || 0), 0), sobreDet: sob, repos: false, reposMes: '' };
@@ -182,13 +183,26 @@ function infoArticulo(cod) {
     usd: p ? Number(p[0]) || 0 : 0,
     D: p ? String(p[2] || '').trim() : '',
     enLista: !!p,
-    stock: st ? st[2] : null,
+    stock: st ? (desc ? Math.round(((parseFloat(String(st[2]).replace(',', '.')) || 0) - desc) * 100) / 100 : st[2]) : null, stockDesc: desc,
     ubic: st ? (S.ubicCambios[cod] || st[3]) : null,
     sobre: sob.reduce((a, x) => a + (x.cant || 0), 0),
     sobreDet: sob,
     repos: S.reposicionado[cod] !== undefined,
     reposMes: S.reposicionado[cod] || ''
   };
+}
+// Descuento provisorio: lo que se sacó para pedidos armados desde la última importación del stock (al importar un Excel nuevo, manda el Excel)
+let _revPedidos = 0, _claveDesc = '', _desc = new Map();
+function marcarPedidos() { _revPedidos++; }
+function descuentoPedidos(cod) {
+  const clave = S.metas.stock + '|' + _revPedidos;
+  if (clave !== _claveDesc) {
+    _claveDesc = clave; _desc = new Map();
+    (S.pedidos || []).forEach(p => (p.items || []).forEach(l => (l.sacado || []).forEach(x => {
+      if (x.stockV === S.metas.stock) _desc.set(l.cod, (_desc.get(l.cod) || 0) + (Number(x.cant) || 0));
+    })));
+  }
+  return _desc.get(cod) || 0;
 }
 function buscarArticulos(q, max = 12) {
   q = normalizar(q);

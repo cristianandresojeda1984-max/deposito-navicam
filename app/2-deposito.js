@@ -75,7 +75,7 @@ function tarjetaArticulo(cod) {
       <div class="fila"><button class="btn chico azul" onclick="agregarAlBorrador('${esc(cod)}')">＋ Al presupuesto</button></div></div>
     <div class="desc">${esc(a.desc || '(sin descripción)')}</div>
     <div class="mini">
-      <div><small>Stock depósito</small><b>${a.stock === null ? '—' : esc(a.stock)}</b></div>
+      <div><small>Stock depósito</small><b>${a.stock === null ? '—' : esc(a.stock)}</b>${a.stockDesc ? `<div class="muted" style="font-size:11px">ya restados ${fmt(a.stockDesc, 0)} de pedidos armados (hasta el próximo Excel)</div>` : ''}</div>
       <div><small>Ubicación</small><b>${esc(a.ubic || '—')}</b></div>
       <div><small>Precio lista (USD ${fmt(a.usd)})</small><b class="num">${a.usd ? masIva(a.usd * S.dolar) : 'Consultar'}</b></div>
       <div><small>Sobre stock</small><b>${a.sobre ? a.sobre + ' u.' : '—'}</b>${a.sobreDet.map(x => `<a href="#" class="link-cajon" data-c="${esc(x.cajon)}" data-cod="${esc(x.cod)}" onclick="abrirCajon(this.dataset.c,this.dataset.cod);return false" title="Abrir el cajón para editar">${esc(x.cajon)} · ${x.cant} u. ›</a>`).join('')}</div>

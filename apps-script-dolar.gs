@@ -14,7 +14,7 @@ const HOJAS = {
   cajones: 'Cajones', registro: 'Registro', ultimo: '_ultimo_excel_stock',
   repos: 'Reposicionados', nexpro: 'NEXPRO',
   clientes: 'Clientes', presupuestos: 'Presupuestos', agenda: 'Agenda', notas: 'Anotaciones',
-  reemplazos: 'Reemplazos', motivos: 'Motivos', ajustes: 'Ajustes', articulos: 'Artículos propios'
+  reemplazos: 'Reemplazos', motivos: 'Motivos', ajustes: 'Ajustes', articulos: 'Artículos propios', pedidos: 'Pedidos'
 };
 // Tablas de "documentos" (una fila por registro, primera columna = ID). Se pueden editar a mano.
 // [campo, encabezado, tipo]  tipo: '' texto · 'n' número · 'j' JSON · 'b' sí/no
@@ -31,7 +31,9 @@ const TABLAS = {
   motivos: [['id', 'Motivo'], ['orden', 'Orden', 'n']],
   ajustes: [['id', 'Clave'], ['valor', 'Valor']],
   // Artículos que no son de Iveco: los cargan ellos y no los toca ninguna importación
-  articulos: [['id', 'Código'], ['desc', 'Descripción'], ['tipo', 'Tipo (PI/PN)'], ['ubic', 'Ubicación'], ['stock', 'Stock', 'n'], ['precio', 'Precio $ sin IVA', 'n'], ['fecha', 'Actualizado']]
+  articulos: [['id', 'Código'], ['desc', 'Descripción'], ['tipo', 'Tipo (PI/PN)'], ['ubic', 'Ubicación'], ['stock', 'Stock', 'n'], ['precio', 'Precio $ sin IVA', 'n'], ['fecha', 'Actualizado']],
+  // Pedidos para armar en el pañol (lo que se sacó de cada renglón va en Ítems)
+  pedidos: [['id', 'ID'], ['num', 'N°', 'n'], ['fecha', 'Fecha'], ['cliente', 'Cliente'], ['estado', 'Estado'], ['resumen', 'Resumen'], ['items', 'Ítems', 'j'], ['creado', 'Creado', 'n']]
 };
 
 const ENC = {
@@ -338,12 +340,13 @@ function guardarDocServidor(t, doc) {
   doc.id = String(doc.id || '').trim();
   if (!doc.id) throw new Error('documento sin ID');
   const h = hoja(t);
-  if (t === 'presupuestos' && !doc.num) {
+  if ((t === 'presupuestos' || t === 'pedidos') && !doc.num) {
     // número correlativo, asignado acá para que no se repita entre dispositivos
+    const clave = t === 'presupuestos' ? 'ultimo_presupuesto' : 'ultimo_pedido';
     const ultima = h.getLastRow();
     const nums = ultima >= 2 ? h.getRange(2, 2, ultima - 1, 1).getValues().map(r => Number(r[0]) || 0) : [];
-    doc.num = Math.max(0, Number(props().getProperty('ultimo_presupuesto') || 0), ...nums) + 1;
-    props().setProperty('ultimo_presupuesto', String(doc.num));
+    doc.num = Math.max(0, Number(props().getProperty(clave) || 0), ...nums) + 1;
+    props().setProperty(clave, String(doc.num));
   }
   const fila = docAFila(t, doc);
   let n = buscarFilaDoc(t, doc.id);

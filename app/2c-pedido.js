@@ -1,12 +1,18 @@
 // ============ Armar pedido: pegar códigos y cantidades → dónde está y si alcanza ============
 // Es un informe del momento (no se guarda). Stock total = el del Excel (incluye el sobre stock); estantería = total − sobre stock.
-const pedido = { cliente: '', codigos: '', cantidades: '', filas: [], orden: 'ubic', dir: 'asc', armado: false };
+const pedido = { cliente: '', codigos: '', cantidades: '', filas: [], orden: 'ubic', dir: 'asc', armado: false, editandoId: null };
+let pedTab = 'nuevo', pedAbierto = null;
 
-VISTAS.pedido = function () {
-  main(`<div class="cab"><div><h1>Armar pedido</h1><p>Pegá la columna de códigos y la de cantidades del Excel: te dice dónde está cada cosa y si alcanza.</p></div>
-    ${pedido.armado ? `<div class="acciones"><button class="btn" onclick="nuevoPedido()">Empezar otro</button></div>` : ''}</div>
+VISTAS.pedido = function (op) {
+  if (op && op.abrir) { pedTab = 'abierto'; pedAbierto = op.abrir; }
+  if (pedTab === 'lista') return vistaPedidosGuardados();
+  if (pedTab === 'abierto' && S.pedidos.some(p => p.id === pedAbierto)) return vistaArmarPedido();
+  pedTab = 'nuevo';
+  const ed = pedido.editandoId && S.pedidos.find(p => p.id === pedido.editandoId);
+  main(`<div class="cab"><div><h1>Armar pedido</h1><p>${ed ? `Editando el <b>Pedido ${numPed(ed)}</b> de ${esc(ed.cliente)}.` : 'Pegá la columna de códigos y la de cantidades del Excel: te dice dónde está cada cosa y si alcanza. Guardalo para armarlo desde el pañol.'}</p></div>
+    <div class="acciones">${tabsPedido()}${pedido.armado || ed ? `<button class="btn" onclick="nuevoPedido()">${ed ? 'Cancelar la edición' : 'Empezar otro'}</button>` : ''}</div></div>
   <div class="panel" style="margin-bottom:14px">
-    <div class="campo" style="max-width:420px"><span class="lbl">Cliente (opcional, sale en el PDF)</span><input class="in" id="pedCli" value="${esc(pedido.cliente)}" placeholder="Ej: TRANSPORTE PEREZ" oninput="pedido.cliente=this.value"></div>
+    <div class="campo" style="max-width:420px"><span class="lbl">Cliente (sale en el PDF y en el pedido guardado)</span><input class="in" id="pedCli" value="${esc(pedido.cliente)}" placeholder="Ej: TRANSPORTE PEREZ" oninput="pedido.cliente=this.value"></div>
     <div class="fila" style="margin-top:10px;align-items:stretch;gap:10px">
       <div class="campo" style="flex:2;min-width:180px"><span class="lbl">Códigos (una columna)</span>
         <textarea class="in mono" id="pedCods" rows="${pedido.armado ? 4 : 12}" placeholder="2992544&#10;500041178&#10;LUB020-P-I" oninput="pedido.codigos=this.value;contarPedido()">${esc(pedido.codigos)}</textarea></div>
@@ -19,7 +25,7 @@ VISTAS.pedido = function () {
   <div id="pedInforme">${pedido.armado ? informePedido() : ''}</div>`);
   contarPedido();
 };
-function nuevoPedido() { Object.assign(pedido, { cliente: '', codigos: '', cantidades: '', filas: [], armado: false }); pintar(); }
+function nuevoPedido() { Object.assign(pedido, { cliente: '', codigos: '', cantidades: '', filas: [], armado: false, editandoId: null }); pedTab = 'nuevo'; pintar(); }
 // Renglones de un textarea pegado desde Excel: se respetan los vacíos del medio (para no correr las filas), se sacan los del final
 function renglones(txt) { const l = String(txt || '').replace(/\r/g, '').split('\n'); while (l.length && !l[l.length - 1].trim()) l.pop(); return l; }
 function contarPedido() {
@@ -99,7 +105,7 @@ function informePedido() {
     <div class="fila" style="margin-bottom:10px">
       <span class="muted">Ordenar:</span><button class="chip ${pedido.orden === 'ubic' ? 'on' : ''}" onclick="pedido.orden='ubic';pedido.dir='asc';pintar()">Por ubicación (para recorrer)</button><button class="chip ${pedido.orden === 'sobre' ? 'on' : ''}" onclick="pedido.orden='sobre';pedido.dir='asc';pintar()">Por cajón</button><button class="chip ${pedido.orden === 'orig' ? 'on' : ''}" onclick="pedido.orden='orig';pedido.dir='asc';pintar()">Como lo pegué</button>
       <span class="muted" style="font-size:12px">o tocá el título de una columna</span>
-      <span style="margin-left:auto" class="fila"><button class="btn" onclick="pdfPedido()">🖨 PDF para armar</button><button class="btn" onclick="excelFaltantes()" ${n('parcial') + n('sin') + n('noexiste') ? '' : 'disabled'}>⬇ Excel de faltantes</button><button class="btn azul" onclick="pedidoACotizador()">Pasar al cotizador</button></span></div>
+      <span style="margin-left:auto" class="fila"><button class="btn" onclick="pdfPedido()">🖨 PDF para armar</button><button class="btn" onclick="excelFaltantes()" ${n('parcial') + n('sin') + n('noexiste') ? '' : 'disabled'}>⬇ Excel de faltantes</button><button class="btn azul" onclick="pedidoACotizador()">Pasar al cotizador</button><button class="btn pri" onclick="guardarPedido()">💾 ${pedido.editandoId ? 'Guardar cambios del pedido' : 'Guardar pedido'}</button></span></div>
     <div class="panel tabla-scroll"><table class="t"><tr>${[['cod', 'Código'], ['desc', 'Descripción'], ['cant', 'Pedido', 'der'], ['total', 'Stock total', 'der'], ['sobre', 'En sobre stock'], ['ubic', 'En estantería'], ['estado', 'Estado']]
       .map(([k, t, c]) => `<th class="${c || ''}" style="cursor:pointer;user-select:none;white-space:nowrap${pedido.orden === k ? ';color:var(--amber)' : ''}" title="Ordenar por ${t.toLowerCase()} (tocá de nuevo para invertir)" onclick="ordenarPedido('${k}')">${t} ${pedido.orden === k ? (pedido.dir === 'desc' ? '▼' : '▲') : '<span style="opacity:.35">↕</span>'}</th>`).join('')}</tr>
     ${l.map(f => `<tr><td class="num" style="color:var(--amber)">${esc(f.cod)}${f.veces > 1 ? `<div class="muted" style="font-size:11px">sumado de ${f.veces} renglones</div>` : ''}</td>
@@ -150,4 +156,185 @@ function pedidoACotizador() {
   if (cli) cambiarClienteBorrador(cli.id);
   guardar('borrador'); ir('cotizador');
   aviso(`${n} artículos pasados al cotizador` + (salteados ? ` · ${salteados} no existen y no se pasaron` : ''), salteados ? '' : 'ok');
+}
+
+
+// ============ Pedidos guardados: se arman desde el pañol ============
+const EST_PEDIDO = { pendiente: ['Pendiente', 't-gris'], armando: ['En armado', 't-amber'], armado: ['Armado', 't-green'] };
+function numPed(p) { return p.num ? String(p.num).padStart(4, '0') : '(nuevo)'; }
+function sacadoDe(l) { return (l.sacado || []).reduce((a, x) => a + (Number(x.cant) || 0), 0); }
+function estadoAuto(p) { if (p.estado === 'armado') return 'armado'; return p.items.some(l => sacadoDe(l) > 0) ? 'armando' : 'pendiente'; }
+function resumenPed(p) { const c = p.items.filter(l => sacadoDe(l) >= l.cant).length; return `${c}/${p.items.length} renglones · ${fmt(p.items.reduce((a, l) => a + sacadoDe(l), 0), 0)} de ${fmt(p.items.reduce((a, l) => a + l.cant, 0), 0)} u.`; }
+function tabsPedido() {
+  const n = S.pedidos.filter(p => p.estado !== 'armado').length;
+  return `<button class="btn ${pedTab === 'nuevo' ? 'pri' : ''}" onclick="pedTab='nuevo';pintar()">Nuevo / informe</button>
+    <button class="btn ${pedTab !== 'nuevo' ? 'pri' : ''}" onclick="pedTab='lista';pintar()">Pedidos guardados${n ? ` (${n} sin armar)` : ''}</button>`;
+}
+async function guardarPedido() {
+  const cli = pedido.cliente.trim().toUpperCase();
+  if (!cli) { aviso('Escribí el cliente para guardar el pedido', 'err'); const e = document.getElementById('pedCli'); if (e) e.focus(); return; }
+  if (!pedido.filas.length) { aviso('Primero armá el informe', 'err'); return; }
+  const ant = pedido.editandoId && S.pedidos.find(p => p.id === pedido.editandoId);
+  if (ant && ant.estado === 'armado') { aviso('Ese pedido ya está armado: no se puede editar', 'err'); return; }
+  const previo = {}; (ant ? ant.items : []).forEach(l => { previo[l.cod] = l; });
+  const sacadosQueSeVan = ant ? ant.items.filter(l => sacadoDe(l) > 0 && !pedido.filas.some(f => f.cod === l.cod)) : [];
+  if (sacadosQueSeVan.length && !confirm(`Sacás del pedido ${sacadosQueSeVan.length} renglones que ya tenían algo sacado (${sacadosQueSeVan.map(l => l.cod).join(', ')}). Lo que salió de cajones NO vuelve solo. ¿Seguir?`)) return;
+  const items = pedido.filas.slice().sort((a, b) => a.orden - b.orden).map(f => ({ cod: f.cod, cant: f.cant, desc: f.desc || '', sacado: previo[f.cod] ? previo[f.cod].sacado || [] : [] }));
+  const doc = { id: ant ? ant.id : uid(), num: ant ? ant.num : null, fecha: ant ? ant.fecha : hoyISO(), cliente: cli, items, creado: ant ? ant.creado : Date.now() };
+  doc.estado = estadoAuto(doc); doc.resumen = resumenPed(doc);
+  const r = await docGuardar('pedidos', doc, { tipo: 'Pedido', detalle: ant ? `${numPed(ant)} editado (${cli}): ${items.length} renglones` : `Nuevo pedido para ${cli}: ${items.length} renglones` });
+  if (!r) return;
+  if (r.resultado && r.resultado.num) doc.num = r.resultado.num;
+  const i = S.pedidos.findIndex(p => p.id === doc.id); if (i >= 0) S.pedidos[i] = doc; else S.pedidos.push(doc);
+  guardar('pedidos'); marcarPedidos();
+  Object.assign(pedido, { cliente: '', codigos: '', cantidades: '', filas: [], armado: false, editandoId: null });
+  aviso(`Pedido ${numPed(doc)} guardado`, 'ok');
+  pedTab = 'abierto'; pedAbierto = doc.id; pintar();
+}
+let filtroPed = 'activos';
+function vistaPedidosGuardados() {
+  const l = S.pedidos.filter(p => filtroPed === 'todos' || (filtroPed === 'armados' ? p.estado === 'armado' : p.estado !== 'armado')).sort((a, b) => (b.num || 0) - (a.num || 0));
+  main(`<div class="cab"><div><h1>Armar pedido</h1><p>Pedidos guardados para armar desde el pañol. Tocá uno para abrirlo y tildar lo que se va sacando.</p></div><div class="acciones">${tabsPedido()}</div></div>
+    <div class="fila" style="margin-bottom:10px">${[['activos', 'Sin armar'], ['armados', 'Armados'], ['todos', 'Todos']].map(([k, t]) => `<button class="chip ${filtroPed === k ? 'on' : ''}" onclick="filtroPed='${k}';pintar()">${t}</button>`).join('')}</div>
+    <div class="panel tabla-scroll">${l.length ? `<table class="t"><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Avance</th><th>Estado</th></tr>
+      ${l.map(p => `<tr class="click" onclick="pedTab='abierto';pedAbierto='${p.id}';pintar()"><td class="num">${numPed(p)}</td><td>${fechaAR(p.fecha)}</td><td><b>${esc(p.cliente)}</b></td><td class="muted" style="font-size:13px">${resumenPed(p)}</td><td><span class="tag ${EST_PEDIDO[p.estado || 'pendiente'][1]}">${EST_PEDIDO[p.estado || 'pendiente'][0]}</span></td></tr>`).join('')}</table>`
+      : '<div class="vacio">No hay pedidos ' + (filtroPed === 'armados' ? 'armados' : filtroPed === 'activos' ? 'sin armar' : 'guardados') + '. Cargalos en “Nuevo / informe” y tocá “Guardar pedido”.</div>'}</div>`);
+}
+// Dónde está cada cosa ahora (estantería = stock − sobre stock)
+function fuentesDe(cod) {
+  const a = infoArticulo(cod); const total = numStock(a.stock);
+  const cajones = (sobreIdx.get(cod) || []).filter(x => x.cant > 0);
+  const enSobre = cajones.reduce((s, x) => s + x.cant, 0);
+  return { a, total, cajones, estante: total === null ? null : Math.max(0, total - enSobre), ubic: a.ubic && a.ubic !== '-' ? a.ubic : '' };
+}
+function vistaArmarPedido() {
+  const p = S.pedidos.find(x => x.id === pedAbierto);
+  const armado = p.estado === 'armado';
+  const items = p.items.map((l, i) => ({ l, i, f: fuentesDe(l.cod) }))
+    .sort((a, b) => (sacadoDe(a.l) >= a.l.cant) - (sacadoDe(b.l) >= b.l.cant) || String(a.f.ubic).localeCompare(String(b.f.ubic), 'es', { numeric: true }));
+  main(`<div class="cab"><div><h1>Pedido ${numPed(p)} · ${esc(p.cliente)}</h1><p>${fechaAR(p.fecha)} · ${resumenPed(p)} · <span class="tag ${EST_PEDIDO[p.estado || 'pendiente'][1]}">${EST_PEDIDO[p.estado || 'pendiente'][0]}</span></p></div>
+    <div class="acciones">${tabsPedido()}</div></div>
+    <div class="fila" style="margin-bottom:12px">
+      ${!armado ? `<button class="btn" onclick="editarPedido('${p.id}')">✎ Editar</button>` : ''}
+      <button class="btn" onclick="pdfPedidoGuardado('${p.id}')">🖨 PDF para armar</button>
+      ${!armado ? `<button class="btn verde" onclick="terminarPedido('${p.id}')">✔ Marcar como armado</button>` : `<button class="btn" onclick="reabrirPedido('${p.id}')">Reabrir</button>`}
+      <button class="btn rojo" style="margin-left:auto" onclick="eliminarPedido('${p.id}')">Eliminar</button></div>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Tildá cada repuesto cuando lo sacás. Si está también en el sobre stock, te pregunta de dónde salió. Lo que sale de la estantería se resta del stock hasta que importen el próximo Excel; lo de los cajones se descuenta del sobre stock.</div>
+    <div class="grid" style="gap:8px">${items.map(({ l, i, f }) => {
+      const s = sacadoDe(l), completo = s >= l.cant;
+      return `<div class="panel" style="padding:10px 12px;${completo ? 'opacity:.6;border-color:var(--green)' : ''}">
+        <div class="fila" style="gap:10px;flex-wrap:nowrap;align-items:flex-start">
+          <input type="checkbox" style="width:26px;height:26px;margin-top:2px;flex:none" ${s > 0 ? 'checked' : ''} ${armado ? 'disabled' : ''} onclick="event.preventDefault();tildarRenglon('${p.id}',${i})">
+          <div style="flex:1;min-width:0"><div class="fila" style="justify-content:space-between"><span class="num" style="color:var(--amber);font-size:16px">${esc(l.cod)}</span>
+            <span><b style="font-size:17px">${s ? fmt(s, 0) + ' / ' : ''}${fmt(l.cant, 0)}</b> <span class="muted">u.</span></span></div>
+            <div style="font-size:14px">${esc(f.a.desc || l.desc || '')}</div>
+            <div class="muted" style="font-size:13px;margin-top:3px">Estantería: <b>${f.estante === null ? '—' : fmt(f.estante, 0) + ' u.'}</b>${f.ubic ? ' · ' + esc(f.ubic) : ''}${f.cajones.map(x => ` · <a href="#" class="link-cajon" style="display:inline;padding:0" data-c="${esc(x.cajon)}" data-cod="${esc(l.cod)}" onclick="abrirCajon(this.dataset.c,this.dataset.cod);return false">${esc(x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))}: ${x.cant} u.</a>`).join('')}</div>
+            ${(l.sacado || []).length ? `<div style="font-size:12px;margin-top:3px;color:var(--green)">Sacado: ${l.sacado.map(x => fmt(x.cant, 0) + ' de ' + (x.de === 'estante' ? 'estantería' : x.de.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))).join(' · ')}</div>` : ''}
+            ${!completo && s > 0 ? `<div style="font-size:12px;color:var(--amber)">Faltan ${fmt(l.cant - s, 0)}</div>` : ''}</div></div></div>`;
+    }).join('')}</div>`);
+}
+function editarPedido(id) {
+  const p = S.pedidos.find(x => x.id === id); if (!p || p.estado === 'armado') return;
+  Object.assign(pedido, { cliente: p.cliente, codigos: p.items.map(l => l.cod).join('\n'), cantidades: p.items.map(l => l.cant).join('\n'), editandoId: p.id });
+  pedTab = 'nuevo'; armarPedido();
+}
+async function guardarDocPedido(p, detalle) {
+  p.estado = p.estado === 'armado' ? 'armado' : estadoAuto(p); p.resumen = resumenPed(p);
+  const r = await docGuardar('pedidos', p, { tipo: 'Pedido', detalle: `${numPed(p)} (${p.cliente}): ${detalle}` });
+  guardar('pedidos'); marcarPedidos();
+  return r;
+}
+// Tildar: si está en cajones, preguntar de dónde se sacó. Destildar: se devuelve solo lo que salió de cajones.
+function tildarRenglon(id, i) {
+  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
+  if (sacadoDe(l) > 0) return formDestildar(id, i);
+  const f = fuentesDe(l.cod); const falta = l.cant - sacadoDe(l);
+  if (!f.cajones.length) return confirmarSacado(id, i, [{ de: 'estante', cant: falta }]);
+  // propuesta: primero estantería, después cajones en orden
+  let resto = falta; const prop = [];
+  const e = Math.min(resto, f.estante || 0); prop.push(['estante', e]); resto -= e;
+  f.cajones.forEach(x => { const c = Math.min(resto, x.cant); prop.push([x.cajon, c]); resto -= c; });
+  if (resto > 0) prop[0][1] += resto;
+  abrirModal(`<h3 style="margin-top:0">¿De dónde sacaste ${esc(l.cod)}?</h3>
+    <p class="muted" style="margin-top:0">${esc(f.a.desc)} · pedido: <b>${fmt(falta, 0)} u.</b></p>
+    ${prop.map(([de, c], k) => { const disp = de === 'estante' ? f.estante : f.cajones.find(x => x.cajon === de).cant;
+      return `<div class="fila" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><div><b>${de === 'estante' ? 'Estantería' + (f.ubic ? ' · ' + esc(f.ubic) : '') : esc(de)}</b><div class="muted" style="font-size:12px">hay ${disp === null ? '—' : fmt(disp, 0)} u.</div></div>
+        <input class="in" type="number" min="0" id="sac_${k}" data-de="${esc(de)}" value="${c}" style="width:80px;text-align:right" oninput="sumaSacado(${falta})"></div>`; }).join('')}
+    <div class="muted" id="sacSuma" style="margin-top:8px;font-size:13px"></div>
+    <div class="fila" style="margin-top:12px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="confirmarSacadoModal('${id}',${i})">Listo, lo saqué</button></div>`);
+  sumaSacado(falta);
+}
+function sumaSacado(falta) {
+  const t = [...document.querySelectorAll('[id^="sac_"]')].reduce((a, e) => a + (parseInt(e.value) || 0), 0);
+  const el = document.getElementById('sacSuma'); if (el) el.innerHTML = `Total: <b>${t}</b> de ${fmt(falta, 0)}` + (t < falta ? ` · quedan faltando ${fmt(falta - t, 0)}` : t > falta ? ' · <span style="color:var(--amber)">más de lo pedido</span>' : ' ✓');
+}
+function confirmarSacadoModal(id, i) {
+  const partes = [...document.querySelectorAll('[id^="sac_"]')].map(e => ({ de: e.dataset.de, cant: parseInt(e.value) || 0 })).filter(x => x.cant > 0);
+  if (!partes.length) { aviso('Poné cuántas sacaste', 'err'); return; }
+  for (const x of partes) if (x.de !== 'estante') { const c = S.sobre.find(y => y.cajon === x.de && y.cod === S.pedidos.find(p => p.id === id).items[i].cod); if (!c || x.cant > c.cant) { aviso(`En ${x.de} no hay tantas`, 'err'); return; } }
+  cerrarModal(); confirmarSacado(id, i, partes);
+}
+async function confirmarSacado(id, i, partes) {
+  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
+  const nota = `Pedido ${numPed(p)} · ${p.cliente}`;
+  const hechas = [];
+  for (const x of partes) {
+    if (x.de !== 'estante') {
+      const c = S.sobre.find(y => y.cajon === x.de && y.cod === l.cod); if (!c) continue;
+      const ok = x.cant >= c.cant ? await remoto({ tipo: 'eliminarItem', cajon: c.cajon, codigo: c.cod, nota: nota + ` (${x.cant} u.)` }, 'Descontando del cajón…')
+        : await remoto({ tipo: 'editarItem', cajon: c.cajon, codigo: c.cod, cantidad: c.cant - x.cant, ubicacion: c.ubic, nota }, 'Descontando del cajón…');
+      if (!ok) break;
+    }
+    hechas.push({ de: x.de, cant: x.cant, ts: Date.now(), stockV: S.metas.stock });
+  }
+  if (!hechas.length) return;
+  l.sacado = (l.sacado || []).concat(hechas);
+  await guardarDocPedido(p, `${l.cod}: sacado ${hechas.map(x => x.cant + ' de ' + (x.de === 'estante' ? 'estantería' : x.de)).join(', ')}`);
+  indexarSobre(); pintar();
+}
+function formDestildar(id, i) {
+  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
+  const deCajon = (l.sacado || []).filter(x => x.de !== 'estante');
+  abrirModal(`<h3 style="margin-top:0">¿Destildar ${esc(l.cod)}?</h3>
+    <p class="muted" style="margin-top:0">Se borra lo anotado como sacado (${l.sacado.map(x => fmt(x.cant, 0) + ' de ' + (x.de === 'estante' ? 'estantería' : esc(x.de))).join(', ')}).
+    ${deCajon.length ? '<br><b>Lo que salió de cajones vuelve al cajón</b> (' + deCajon.map(x => fmt(x.cant, 0) + ' u. a ' + esc(x.de)).join(', ') + ').' : ''}</p>
+    <div class="fila" style="justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn rojo" onclick="cerrarModal();destildar('${id}',${i})">Destildar</button></div>`);
+}
+async function destildar(id, i) {
+  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
+  const nota = `Pedido ${numPed(p)} · ${p.cliente} · se destildó`;
+  const porCajon = {};
+  (l.sacado || []).filter(x => x.de !== 'estante').forEach(x => { porCajon[x.de] = (porCajon[x.de] || 0) + x.cant; });
+  for (const caj of Object.keys(porCajon)) {
+    const a = infoArticulo(l.cod);
+    if (!await agregarOSumarEnCajon(caj, l.cod, porCajon[caj], a.ubic && a.ubic !== '-' ? a.ubic : '-', nota, 'Devolviendo al cajón…')) { pintar(); return; }
+  }
+  l.sacado = [];
+  await guardarDocPedido(p, `${l.cod}: destildado` + (Object.keys(porCajon).length ? ' (devuelto a ' + Object.keys(porCajon).join(', ') + ')' : ''));
+  indexarSobre(); pintar();
+}
+async function terminarPedido(id) {
+  const p = S.pedidos.find(x => x.id === id);
+  const faltan = p.items.filter(l => sacadoDe(l) < l.cant);
+  if (faltan.length && !confirm(`Quedan ${faltan.length} renglones sin completar (${faltan.slice(0, 5).map(l => l.cod).join(', ')}${faltan.length > 5 ? '…' : ''}). ¿Marcar el pedido como armado igual?`)) return;
+  p.estado = 'armado';
+  if (await guardarDocPedido(p, 'marcado como armado' + (faltan.length ? ` (faltaron ${faltan.length} renglones)` : ''))) aviso(`Pedido ${numPed(p)} armado`, 'ok');
+  pintar();
+}
+async function reabrirPedido(id) {
+  const p = S.pedidos.find(x => x.id === id); p.estado = 'armando';
+  await guardarDocPedido(p, 'reabierto'); pintar();
+}
+async function eliminarPedido(id) {
+  const p = S.pedidos.find(x => x.id === id);
+  if (!confirm(`¿Eliminar el Pedido ${numPed(p)} de ${p.cliente}? Lo que ya se sacó de los cajones no vuelve.`)) return;
+  if (!await docBorrar('pedidos', id, { tipo: 'Pedido', detalle: `${numPed(p)} eliminado (${p.cliente})` })) return;
+  S.pedidos = S.pedidos.filter(x => x.id !== id); guardar('pedidos'); marcarPedidos(); pedTab = 'lista'; pintar();
+}
+function pdfPedidoGuardado(id) {
+  const p = S.pedidos.find(x => x.id === id);
+  const antes = { cliente: pedido.cliente, filas: pedido.filas };
+  pedido.cliente = `${p.cliente} · Pedido ${numPed(p)}`;
+  pedido.filas = p.items.map((l, k) => calcFilaPedido({ cod: l.cod, cant: l.cant, orden: k, veces: 1 }));
+  try { pdfPedido(); } finally { Object.assign(pedido, antes); }
 }
