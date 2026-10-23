@@ -205,7 +205,7 @@ tr.fila-marcada td{background:rgba(245,180,40,.18)!important;transition:backgrou
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-23 11:47</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-23 13:25</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -1523,6 +1523,28 @@ function repintarGrilla() { const g = document.getElementById('grillaPed'); if (
 function filasGrilla(n) { _filasExtra += n; repintarGrilla(); }
 function limpiarGrilla() { if ((pedido.codigos || pedido.cantidades) && !confirm('¿Borrar todos los códigos y cantidades cargados?')) return; pedido.codigos = ''; pedido.cantidades = ''; _filasExtra = 0; repintarGrilla(); contarPedido(); }
 
+// ---- Desde un presupuesto (o el cotizador) a Armar pedido: carga la grilla y arma el informe para revisar y guardar
+function cargarEnPedido(filas, cliente, origen) {
+  filas = filas.filter(f => f.cod && f.cant > 0);
+  if (!filas.length) { aviso('No hay artículos para pasar', 'err'); return; }
+  if ((renglones(pedido.codigos).length || pedido.editandoId) && !confirm('En Armar pedido ya hay códigos cargados. ¿Reemplazarlos por los de ' + origen + '?')) return;
+  if (hayCambiosPed() && !salirDelPedido()) return;
+  Object.assign(pedido, { cliente: String(cliente || '').toUpperCase(), codigos: filas.map(f => f.cod).join('\n'), cantidades: filas.map(f => f.cant).join('\n'), filas: [], armado: false, editandoId: null });
+  pedTab = 'nuevo'; ir('pedido'); armarPedido();
+  aviso(`${filas.length} artículos de ${origen}. Revisá y tocá “💾 Guardar pedido”.`, 'ok');
+}
+function presupuestoAPedido(id) {
+  const p = S.presupuestos.find(x => x.id === id); if (!p) return;
+  // si ya se confirmó la venta, se pasa solo lo vendido
+  const vendidos = p.estado === 'cerrado' ? p.items.filter(l => (l.vendido || 0) > 0) : [];
+  const filas = (vendidos.length ? vendidos.map(l => ({ cod: l.cod, cant: l.vendido })) : p.items.map(l => ({ cod: l.cod, cant: l.cant })));
+  cargarEnPedido(filas, p.clienteNombre, `el presupuesto ${numPresu(p)}` + (vendidos.length ? ' (lo vendido)' : ''));
+}
+function cotizadorAPedido() {
+  const b = B(); const cli = cliente(b.clienteId);
+  cargarEnPedido(b.items.map(l => ({ cod: l.cod, cant: l.cant })), cli ? cli.nombre : '', 'el cotizador');
+}
+
 // ============ Cotizador ============
 function borradorVacio(clienteId) {
   return { editandoId: null, clienteId: clienteId || '', validezDias: Number(S.ajustes.validez) || 7, fecha: hoyISO(), dolar: S.dolar, items: [], notas: '' };
@@ -1546,6 +1568,7 @@ VISTAS.cotizador = function () {
       <button class="btn" onclick="enviarWhatsApp(armarDesdeBorrador())" ${b.items.length && cli ? '' : 'disabled'}>WhatsApp</button>
       <button class="btn" onclick="vistaCliente(armarDesdeBorrador())" ${b.items.length && cli ? '' : 'disabled'}>Vista cliente / PDF</button>
       <button class="btn" onclick="exportarPresupuesto(armarDesdeBorrador())" ${b.items.length && cli ? '' : 'disabled'}>Excel</button>
+      <button class="btn" onclick="cotizadorAPedido()" ${b.items.length ? '' : 'disabled'} title="Lleva los artículos a Armar pedido">☑ Armar pedido</button>
       <button class="btn rojo" onclick="descartarBorrador()" ${b.items.length || ed ? '' : 'disabled'}>Descartar</button>
       <button class="btn pri" onclick="guardarPresupuesto()" ${b.items.length && cli ? '' : 'disabled'}>${ed ? 'Guardar cambios' : 'Guardar presupuesto'}</button>
     </div></div>
@@ -2126,6 +2149,7 @@ function detallePresu(p) {
     <div class="fila">
       ${abierto ? `<button class="btn azul" onclick="abrirEnCotizador('${p.id}')">✎ Modificar</button>` : `<span class="tag t-gris" style="padding:8px 10px" title="Ya se confirmó la venta o se desestimó">🔒 Cerrado</span><button class="btn" onclick="reabrir('${p.id}')" title="Solo para corregir una confirmación hecha por error">Reabrir (corregir)</button>`}
       <button class="btn" onclick="duplicar('${p.id}')">Copiar a un presupuesto nuevo</button>
+      <button class="btn" onclick="presupuestoAPedido('${p.id}')" title="Lleva los artículos a Armar pedido">☑ Armar pedido</button>
       <button class="btn" onclick="vistaCliente(S.presupuestos.find(x=>x.id==='${p.id}'))">Vista cliente / PDF</button>
       <button class="btn" onclick="enviarWhatsApp(S.presupuestos.find(x=>x.id==='${p.id}'))">WhatsApp${cli && cli.whatsapp ? '' : ' (sin número)'}</button>
       <button class="btn" onclick="exportarPresupuesto(S.presupuestos.find(x=>x.id==='${p.id}'))">Excel</button>
@@ -3221,7 +3245,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-23 11:47';
+const VERSION_APP = '2026-10-23 13:25';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));

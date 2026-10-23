@@ -444,3 +444,25 @@ function pegarCelda(ev, el) {
 function repintarGrilla() { const g = document.getElementById('grillaPed'); if (g) g.innerHTML = grillaPedido(); }
 function filasGrilla(n) { _filasExtra += n; repintarGrilla(); }
 function limpiarGrilla() { if ((pedido.codigos || pedido.cantidades) && !confirm('¿Borrar todos los códigos y cantidades cargados?')) return; pedido.codigos = ''; pedido.cantidades = ''; _filasExtra = 0; repintarGrilla(); contarPedido(); }
+
+// ---- Desde un presupuesto (o el cotizador) a Armar pedido: carga la grilla y arma el informe para revisar y guardar
+function cargarEnPedido(filas, cliente, origen) {
+  filas = filas.filter(f => f.cod && f.cant > 0);
+  if (!filas.length) { aviso('No hay artículos para pasar', 'err'); return; }
+  if ((renglones(pedido.codigos).length || pedido.editandoId) && !confirm('En Armar pedido ya hay códigos cargados. ¿Reemplazarlos por los de ' + origen + '?')) return;
+  if (hayCambiosPed() && !salirDelPedido()) return;
+  Object.assign(pedido, { cliente: String(cliente || '').toUpperCase(), codigos: filas.map(f => f.cod).join('\n'), cantidades: filas.map(f => f.cant).join('\n'), filas: [], armado: false, editandoId: null });
+  pedTab = 'nuevo'; ir('pedido'); armarPedido();
+  aviso(`${filas.length} artículos de ${origen}. Revisá y tocá “💾 Guardar pedido”.`, 'ok');
+}
+function presupuestoAPedido(id) {
+  const p = S.presupuestos.find(x => x.id === id); if (!p) return;
+  // si ya se confirmó la venta, se pasa solo lo vendido
+  const vendidos = p.estado === 'cerrado' ? p.items.filter(l => (l.vendido || 0) > 0) : [];
+  const filas = (vendidos.length ? vendidos.map(l => ({ cod: l.cod, cant: l.vendido })) : p.items.map(l => ({ cod: l.cod, cant: l.cant })));
+  cargarEnPedido(filas, p.clienteNombre, `el presupuesto ${numPresu(p)}` + (vendidos.length ? ' (lo vendido)' : ''));
+}
+function cotizadorAPedido() {
+  const b = B(); const cli = cliente(b.clienteId);
+  cargarEnPedido(b.items.map(l => ({ cod: l.cod, cant: l.cant })), cli ? cli.nombre : '', 'el cotizador');
+}
