@@ -21,7 +21,6 @@ VISTAS.cotizador = function () {
       <button class="btn" onclick="enviarWhatsApp(armarDesdeBorrador())" ${b.items.length && cli ? '' : 'disabled'}>WhatsApp</button>
       <button class="btn" onclick="vistaCliente(armarDesdeBorrador())" ${b.items.length && cli ? '' : 'disabled'}>Vista cliente / PDF</button>
       <button class="btn" onclick="exportarPresupuesto(armarDesdeBorrador())" ${b.items.length && cli ? '' : 'disabled'}>Excel</button>
-      <button class="btn" onclick="cotizadorAPedido()" ${b.items.length ? '' : 'disabled'} title="Lleva los artículos a Armar pedido">☑ Armar pedido</button>
       <button class="btn rojo" onclick="descartarBorrador()" ${b.items.length || ed ? '' : 'disabled'}>Descartar</button>
       <button class="btn pri" onclick="guardarPresupuesto()" ${b.items.length && cli ? '' : 'disabled'}>${ed ? 'Guardar cambios' : 'Guardar presupuesto'}</button>
     </div></div>
