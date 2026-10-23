@@ -165,6 +165,15 @@ table.t tr.sel td{background:#172744}
 .link-cajon:hover{text-decoration:underline}
 tr.fila-marcada td{background:rgba(245,180,40,.18)!important;transition:background .4s}
 
+.grilla-ped{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:8px}
+.grilla{border-collapse:collapse}.grilla th{position:sticky;top:0;background:var(--panel2);z-index:1}
+.grilla td{padding:0 !important;border-bottom:1px solid var(--line)}
+.grilla td.muted,.grilla td.desc-celda{padding:4px 8px !important}
+.grilla td.desc-celda{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:380px}
+.celda{width:100%;box-sizing:border-box;background:transparent;border:1px solid transparent;color:var(--txt);padding:7px 8px;font-size:14px;outline:none}
+.celda:focus{border-color:var(--amber);background:#0f1729}
+.celda.der{text-align:right}
+
 </style>
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
@@ -196,7 +205,7 @@ tr.fila-marcada td{background:rgba(245,180,40,.18)!important;transition:backgrou
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-23 10:48</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-10-23 10:57</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -1081,12 +1090,9 @@ VISTAS.pedido = function (op) {
     <div class="acciones">${tabsPedido()}${pedido.armado || ed ? `<button class="btn" onclick="nuevoPedido()">${ed ? 'Cancelar la edición' : 'Empezar otro'}</button>` : ''}</div></div>
   <div class="panel" style="margin-bottom:14px">
     <div class="campo" style="max-width:420px"><span class="lbl">Cliente (sale en el PDF y en el pedido guardado)</span><input class="in" id="pedCli" value="${esc(pedido.cliente)}" placeholder="Ej: TRANSPORTE PEREZ" oninput="pedido.cliente=this.value"></div>
-    <div class="fila" style="margin-top:10px;align-items:stretch;gap:10px">
-      <div class="campo" style="flex:2;min-width:180px"><span class="lbl">Códigos (una columna)</span>
-        <textarea class="in mono" id="pedCods" rows="${pedido.armado ? 4 : 12}" placeholder="2992544&#10;500041178&#10;LUB020-P-I" oninput="pedido.codigos=this.value;contarPedido()">${esc(pedido.codigos)}</textarea></div>
-      <div class="campo" style="flex:1;min-width:110px"><span class="lbl">Cantidades (una columna)</span>
-        <textarea class="in mono" id="pedCants" rows="${pedido.armado ? 4 : 12}" placeholder="12&#10;40&#10;2" oninput="pedido.cantidades=this.value;contarPedido()">${esc(pedido.cantidades)}</textarea></div>
-    </div>
+    <div class="fila" style="margin-top:10px;justify-content:space-between"><span class="lbl" style="margin:0">Códigos y cantidades · pegá las dos columnas del Excel en la primera celda (o una columna por vez). Tab avanza como en Excel, Enter baja.</span>
+      <span class="fila" style="gap:6px"><button class="btn chico" onclick="filasGrilla(10)">＋ 10 filas</button><button class="btn chico" onclick="limpiarGrilla()">Limpiar</button></span></div>
+    <div id="grillaPed" class="grilla-ped">${grillaPedido()}</div>
     <div class="fila" style="margin-top:10px;justify-content:space-between"><span class="muted" id="pedCuenta" style="font-size:13px"></span>
       <button class="btn pri" onclick="armarPedido()">${pedido.armado ? 'Volver a armar el informe' : 'Armar informe →'}</button></div>
   </div>
@@ -1098,25 +1104,20 @@ function nuevoPedido() { Object.assign(pedido, { cliente: '', codigos: '', canti
 function renglones(txt) { const l = String(txt || '').replace(/\r/g, '').split('\n'); while (l.length && !l[l.length - 1].trim()) l.pop(); return l; }
 function contarPedido() {
   const el = document.getElementById('pedCuenta'); if (!el) return;
-  const c = renglones(pedido.codigos), q = renglones(pedido.cantidades);
-  if (!c.length) { el.textContent = ''; return; }
-  const juntas = !q.length && c.some(x => x.includes('\t'));
-  el.innerHTML = juntas ? `${c.length} renglones (código y cantidad juntos)`
-    : !q.length ? `${c.length} códigos · sin cantidades (va 1 a cada uno)`
-    : c.length === q.length ? `${c.length} códigos · ${q.length} cantidades ✓`
-    : `<span style="color:var(--red)">${c.length} códigos y ${q.length} cantidades: no coinciden</span>`;
+  const { c, q } = lineasPed(); const n = Math.max(c.length, q.length);
+  let cods = 0, sinCant = 0, sinCod = 0;
+  for (let i = 0; i < n; i++) { const a = (c[i] || '').trim(), b = (q[i] || '').trim(); if (a) { cods++; if (!b) sinCant++; } else if (b) sinCod++; }
+  el.innerHTML = !cods && !sinCod ? '' : `${cods} códigos` + (sinCant ? ` · ${sinCant} sin cantidad (va 1)` : ' ✓') + (sinCod ? ` · <span style="color:var(--red)">${sinCod} cantidades sin código (no se toman)</span>` : '');
 }
 function armarPedido() {
-  const c = renglones(pedido.codigos), q = renglones(pedido.cantidades);
-  if (!c.length) { aviso('Pegá la columna de códigos', 'err'); return; }
+  const { c, q } = lineasPed();
   const pares = [];
-  if (!q.length && c.some(x => x.includes('\t'))) {
-    // las dos columnas pegadas juntas en el primer casillero
-    c.forEach(x => { const t = x.split('\t').map(s => s.trim()); if (t[0]) pares.push([t[0], t[1]]); });
-  } else {
-    if (q.length && q.length !== c.length) { aviso(`Hay ${c.length} códigos y ${q.length} cantidades. Revisá que estén las dos columnas completas (mismas filas).`, 'err'); return; }
-    c.forEach((x, i) => { if (x.trim()) pares.push([x.trim(), q.length ? String(q[i] || '').trim() : '1']); else if (q.length && String(q[i] || '').trim()) pares.push(['', q[i]]); });
+  for (let i = 0; i < Math.max(c.length, q.length); i++) {
+    const a = (c[i] || '').trim(), b = (q[i] || '').trim();
+    if (a.includes('\t') && !b) { const t = a.split('\t'); pares.push([t[0].trim(), (t[1] || '').trim()]); }   // las dos columnas en una celda
+    else if (a) pares.push([a, b || '1']); else if (b) pares.push(['', b]);
   }
+  if (!pares.some(p => p[0])) { aviso('Cargá al menos un código', 'err'); return; }
   const sinCod = pares.filter(p => !p[0]).length;
   const filas = [], idx = {};
   pares.filter(p => p[0]).forEach(([cod, cant], orden) => {
@@ -1406,6 +1407,67 @@ function pdfPedidoGuardado(id) {
   pedido.filas = p.items.map((l, k) => calcFilaPedido({ cod: l.cod, cant: l.cant, orden: k, veces: 1 }));
   try { pdfPedido(); } finally { Object.assign(pedido, antes); }
 }
+
+
+// ---- Grilla tipo Excel para cargar códigos y cantidades (los textos de pedido.codigos/cantidades siguen siendo la fuente)
+let _filasExtra = 0;
+function lineasPed() { return { c: String(pedido.codigos || '').replace(/\r/g, '').split('\n'), q: String(pedido.cantidades || '').replace(/\r/g, '').split('\n') }; }
+function grillaPedido() {
+  const { c, q } = lineasPed();
+  const usadas = Math.max(renglones(pedido.codigos).length, renglones(pedido.cantidades).length);
+  const n = Math.max(12, usadas + 3) + _filasExtra;
+  let h = `<table class="t grilla"><tr><th style="width:34px"></th><th>Código</th><th style="width:110px" class="der">Cantidad</th><th>Descripción</th></tr>`;
+  for (let r = 0; r < n; r++) {
+    const cod = (c[r] || '').trim(), a = cod ? infoArticulo(limpiarCodigo(cod)) : null;
+    h += `<tr><td class="muted der" style="font-size:11px">${r + 1}</td>
+      <td><input class="celda mono" data-r="${r}" data-k="0" value="${esc(c[r] || '')}" oninput="celdaPed(this)" onkeydown="teclaCelda(event,this)" onpaste="pegarCelda(event,this)"></td>
+      <td><input class="celda mono der" data-r="${r}" data-k="1" value="${esc(q[r] || '')}" oninput="celdaPed(this)" onkeydown="teclaCelda(event,this)" onpaste="pegarCelda(event,this)"></td>
+      <td class="desc-celda" id="gd_${r}">${a ? (a.desc ? esc(a.desc) : (existeArticulo(limpiarCodigo(cod)) ? '' : '<span style="color:var(--red)">no existe</span>')) : ''}</td></tr>`;
+  }
+  return h + '</table>';
+}
+function ponerLinea(k, r, v) {
+  const { c, q } = lineasPed(); const l = k === 0 ? c : q;
+  while (l.length <= r) l.push('');
+  l[r] = v;
+  if (k === 0) pedido.codigos = l.join('\n'); else pedido.cantidades = l.join('\n');
+}
+function celdaPed(el) {
+  const r = +el.dataset.r, k = +el.dataset.k;
+  ponerLinea(k, r, el.value.trim());
+  if (k === 0) { const cod = limpiarCodigo(el.value), d = document.getElementById('gd_' + r), a = cod ? infoArticulo(cod) : null;
+    if (d) d.innerHTML = a ? (a.desc ? esc(a.desc) : existeArticulo(cod) ? '' : '<span style="color:var(--red)">no existe</span>') : ''; }
+  contarPedido();
+}
+function celdaEn(r, k) { return document.querySelector(`#grillaPed input[data-r="${r}"][data-k="${k}"]`); }
+function irACelda(r, k) {
+  let e = celdaEn(r, k);
+  if (!e) { _filasExtra += 10; repintarGrilla(); e = celdaEn(r, k); }
+  if (e) { e.focus(); e.select(); }
+}
+function teclaCelda(ev, el) {
+  const r = +el.dataset.r, k = +el.dataset.k;
+  if (ev.key === 'Tab' && !ev.shiftKey) { ev.preventDefault(); k === 0 ? irACelda(r, 1) : irACelda(r + 1, 0); }
+  else if (ev.key === 'Tab' && ev.shiftKey) { ev.preventDefault(); k === 1 ? irACelda(r, 0) : r > 0 && irACelda(r - 1, 1); }
+  else if (ev.key === 'Enter') { ev.preventDefault(); irACelda(r + 1, k); }
+  else if (ev.key === 'ArrowDown') { ev.preventDefault(); irACelda(r + 1, k); }
+  else if (ev.key === 'ArrowUp' && r > 0) { ev.preventDefault(); irACelda(r - 1, k); }
+}
+// Pegar desde Excel: filas separadas por salto de línea y columnas por tabulación, desde la celda donde se pega
+function pegarCelda(ev, el) {
+  const txt = (ev.clipboardData || window.clipboardData).getData('text');
+  if (!/[\t\n]/.test(txt.replace(/\n$/, ''))) return;   // un solo valor: pegado normal
+  ev.preventDefault();
+  const filas = txt.replace(/\r/g, '').replace(/\n+$/, '').split('\n').map(f => f.split('\t'));
+  const r0 = +el.dataset.r, k0 = +el.dataset.k;
+  filas.forEach((cols, i) => cols.forEach((v, j) => { const k = k0 + j; if (k <= 1) ponerLinea(k, r0 + i, String(v).trim()); }));
+  repintarGrilla(); contarPedido();
+  irACelda(r0 + filas.length, k0);
+  aviso(`${filas.length} filas pegadas`, 'ok');
+}
+function repintarGrilla() { const g = document.getElementById('grillaPed'); if (g) g.innerHTML = grillaPedido(); }
+function filasGrilla(n) { _filasExtra += n; repintarGrilla(); }
+function limpiarGrilla() { if ((pedido.codigos || pedido.cantidades) && !confirm('¿Borrar todos los códigos y cantidades cargados?')) return; pedido.codigos = ''; pedido.cantidades = ''; _filasExtra = 0; repintarGrilla(); contarPedido(); }
 
 // ============ Cotizador ============
 function borradorVacio(clienteId) {
@@ -3105,7 +3167,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-10-23 10:48';
+const VERSION_APP = '2026-10-23 10:57';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));
