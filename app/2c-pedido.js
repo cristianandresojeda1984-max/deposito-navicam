@@ -159,8 +159,8 @@ function estadoAuto(p) { if (p.estado === 'armado') return 'armado'; return p.it
 function resumenPed(p) { const c = p.items.filter(l => sacadoDe(l) >= l.cant).length; return `${c}/${p.items.length} renglones · ${fmt(p.items.reduce((a, l) => a + sacadoDe(l), 0), 0)} de ${fmt(p.items.reduce((a, l) => a + l.cant, 0), 0)} u.`; }
 function tabsPedido() {
   const n = S.pedidos.filter(p => p.estado !== 'armado').length;
-  return `<button class="btn ${pedTab === 'nuevo' ? 'pri' : ''}" onclick="pedTab='nuevo';pintar()">Nuevo / informe</button>
-    <button class="btn ${pedTab !== 'nuevo' ? 'pri' : ''}" onclick="pedTab='lista';pintar()">Pedidos guardados${n ? ` (${n} sin armar)` : ''}</button>`;
+  return `<button class="btn ${pedTab === 'nuevo' ? 'pri' : ''}" onclick="if(salirDelPedido()){pedTab='nuevo';pintar()}">Nuevo / informe</button>
+    <button class="btn ${pedTab !== 'nuevo' ? 'pri' : ''}" onclick="if(salirDelPedido()){pedTab='lista';pintar()}">Pedidos guardados${n ? ` (${n} sin armar)` : ''}</button>`;
 }
 async function guardarPedido() {
   const cli = pedido.cliente.trim().toUpperCase();
@@ -193,39 +193,74 @@ function vistaPedidosGuardados() {
       : '<div class="vacio">No hay pedidos ' + (filtroPed === 'armados' ? 'armados' : filtroPed === 'activos' ? 'sin armar' : 'guardados') + '. Cargalos en “Nuevo / informe” y tocá “Guardar pedido”.</div>'}</div>`);
 }
 // Dónde está cada cosa ahora (estantería = stock − sobre stock)
+// ---- Armado con borrador: se tilda todo en el teléfono sin guardar y al final se guarda una sola vez
+let borrPed = null;   // { id, items, delta: { 'CAJON|COD': unidades a descontar (+) o devolver (−) }, cambios }
+function pedidoVista(id) { return borrPed && borrPed.id === id ? borrPed : S.pedidos.find(x => x.id === id); }
+function abrirBorrador(id) {
+  if (borrPed && borrPed.id === id) return borrPed;
+  const p = S.pedidos.find(x => x.id === id);
+  borrPed = Object.assign(JSON.parse(JSON.stringify(p)), { delta: {}, cambios: 0 });
+  return borrPed;
+}
+function hayCambiosPed() { return !!(borrPed && borrPed.cambios); }
+window.addEventListener('beforeunload', e => { if (hayCambiosPed()) { e.preventDefault(); e.returnValue = ''; } });
+// Al salir de la pantalla con cambios sin guardar, preguntar
+function salirDelPedido() {
+  if (!hayCambiosPed()) { borrPed = null; return true; }
+  if (confirm(`Tenés ${borrPed.cambios} cambios sin guardar en el Pedido ${numPed(borrPed)}. ¿Salir sin guardar? (Cancelar = quedarse)`)) { borrPed = null; return true; }
+  return false;
+}
 function fuentesDe(cod) {
   const a = infoArticulo(cod); const total = numStock(a.stock);
-  const cajones = (sobreIdx.get(cod) || []).filter(x => x.cant > 0);
-  const enSobre = cajones.reduce((s, x) => s + x.cant, 0);
+  const cajones = (sobreIdx.get(cod) || []).map(x => ({ ...x, cant: x.cant - ((borrPed && borrPed.delta[x.cajon + '|' + cod]) || 0) })).filter(x => x.cant > 0);
+  const enSobre = (sobreIdx.get(cod) || []).reduce((s, x) => s + x.cant, 0);
   return { a, total, cajones, estante: total === null ? null : Math.max(0, total - enSobre), ubic: a.ubic && a.ubic !== '-' ? a.ubic : '' };
 }
+function tarjetaRenglon(p, l, i, f, armado) {
+  const s = sacadoDe(l), completo = s >= l.cant;
+  return `<div class="panel" id="ren_${i}" style="padding:10px 12px;${completo ? 'opacity:.6;border-color:var(--green)' : ''}">
+    <div class="fila" style="gap:10px;flex-wrap:nowrap;align-items:flex-start">
+      <input type="checkbox" style="width:26px;height:26px;margin-top:2px;flex:none" ${s > 0 ? 'checked' : ''} ${armado ? 'disabled' : ''} onclick="event.preventDefault();tildarRenglon('${p.id}',${i})">
+      <div style="flex:1;min-width:0"><div class="fila" style="justify-content:space-between"><span class="num" style="color:var(--amber);font-size:16px">${esc(l.cod)}</span>
+        <span><b style="font-size:17px">${s ? fmt(s, 0) + ' / ' : ''}${fmt(l.cant, 0)}</b> <span class="muted">u.</span></span></div>
+        <div style="font-size:14px">${esc(f.a.desc || l.desc || '')}</div>
+        <div class="muted" style="font-size:13px;margin-top:3px">Estantería: <b>${f.estante === null ? '—' : fmt(f.estante, 0) + ' u.'}</b>${f.ubic ? ' · ' + esc(f.ubic) : ''}${f.cajones.map(x => ` · ${esc(x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))}: ${x.cant} u.`).join('')}</div>
+        ${(l.sacado || []).length ? `<div style="font-size:12px;margin-top:3px;color:var(--green)">Sacado: ${l.sacado.map(x => fmt(x.cant, 0) + ' de ' + (x.de === 'estante' ? 'estantería' : x.de.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón ')) + (x.nuevo ? ' <span style="color:var(--amber)">(sin guardar)</span>' : '')).join(' · ')}</div>` : ''}
+        ${!completo && s > 0 ? `<div style="font-size:12px;color:var(--amber)">Faltan ${fmt(l.cant - s, 0)}</div>` : ''}</div></div></div>`;
+}
+function barraGuardar(p) {
+  const n = borrPed && borrPed.id === p.id ? borrPed.cambios : 0;
+  return `<div id="barraPed" style="position:sticky;bottom:0;z-index:5;margin-top:12px;${n ? '' : 'display:none'}">
+    <div class="panel fila" style="justify-content:space-between;border-color:var(--amber);background:#1c1a10">
+      <span><b>${n}</b> cambio${n === 1 ? '' : 's'} sin guardar</span>
+      <span class="fila" style="gap:6px"><button class="btn" onclick="descartarBorrador()">Descartar</button><button class="btn pri" onclick="guardarCambiosPedido()">💾 Guardar cambios</button></span></div></div>`;
+}
 function vistaArmarPedido() {
-  const p = S.pedidos.find(x => x.id === pedAbierto);
+  const p = pedidoVista(pedAbierto);
   const armado = p.estado === 'armado';
+  // orden fijo por ubicación (no se mueven las tarjetas al tildar)
   const items = p.items.map((l, i) => ({ l, i, f: fuentesDe(l.cod) }))
-    .sort((a, b) => (sacadoDe(a.l) >= a.l.cant) - (sacadoDe(b.l) >= b.l.cant) || String(a.f.ubic).localeCompare(String(b.f.ubic), 'es', { numeric: true }));
-  main(`<div class="cab"><div><h1>Pedido ${numPed(p)} · ${esc(p.cliente)}</h1><p>${fechaAR(p.fecha)} · ${resumenPed(p)} · <span class="tag ${EST_PEDIDO[p.estado || 'pendiente'][1]}">${EST_PEDIDO[p.estado || 'pendiente'][0]}</span></p></div>
+    .sort((a, b) => String(a.f.ubic || 'zzz').localeCompare(String(b.f.ubic || 'zzz'), 'es', { numeric: true }) || a.i - b.i);
+  main(`<div class="cab"><div><h1>Pedido ${numPed(p)} · ${esc(p.cliente)}</h1><p id="resPed">${fechaAR(p.fecha)} · ${resumenPed(p)} · <span class="tag ${EST_PEDIDO[estadoAuto(p)][1]}">${EST_PEDIDO[estadoAuto(p)][0]}</span></p></div>
     <div class="acciones">${tabsPedido()}</div></div>
     <div class="fila" style="margin-bottom:12px">
       ${!armado ? `<button class="btn" onclick="editarPedido('${p.id}')">✎ Editar</button>` : ''}
       <button class="btn" onclick="pdfPedidoGuardado('${p.id}')">🖨 PDF para armar</button>
       ${!armado ? `<button class="btn verde" onclick="terminarPedido('${p.id}')">✔ Marcar como armado</button>` : `<button class="btn" onclick="reabrirPedido('${p.id}')">Reabrir</button>`}
       <button class="btn rojo" style="margin-left:auto" onclick="eliminarPedido('${p.id}')">Eliminar</button></div>
-    <div class="muted" style="font-size:12px;margin-bottom:8px">Tildá cada repuesto cuando lo sacás. Si está también en el sobre stock, te pregunta de dónde salió. Lo que sale de la estantería se resta del stock hasta que importen el próximo Excel; lo de los cajones se descuenta del sobre stock.</div>
-    <div class="grid" style="gap:8px">${items.map(({ l, i, f }) => {
-      const s = sacadoDe(l), completo = s >= l.cant;
-      return `<div class="panel" style="padding:10px 12px;${completo ? 'opacity:.6;border-color:var(--green)' : ''}">
-        <div class="fila" style="gap:10px;flex-wrap:nowrap;align-items:flex-start">
-          <input type="checkbox" style="width:26px;height:26px;margin-top:2px;flex:none" ${s > 0 ? 'checked' : ''} ${armado ? 'disabled' : ''} onclick="event.preventDefault();tildarRenglon('${p.id}',${i})">
-          <div style="flex:1;min-width:0"><div class="fila" style="justify-content:space-between"><span class="num" style="color:var(--amber);font-size:16px">${esc(l.cod)}</span>
-            <span><b style="font-size:17px">${s ? fmt(s, 0) + ' / ' : ''}${fmt(l.cant, 0)}</b> <span class="muted">u.</span></span></div>
-            <div style="font-size:14px">${esc(f.a.desc || l.desc || '')}</div>
-            <div class="muted" style="font-size:13px;margin-top:3px">Estantería: <b>${f.estante === null ? '—' : fmt(f.estante, 0) + ' u.'}</b>${f.ubic ? ' · ' + esc(f.ubic) : ''}${f.cajones.map(x => ` · <a href="#" class="link-cajon" style="display:inline;padding:0" data-c="${esc(x.cajon)}" data-cod="${esc(l.cod)}" onclick="abrirCajon(this.dataset.c,this.dataset.cod);return false">${esc(x.cajon.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))}: ${x.cant} u.</a>`).join('')}</div>
-            ${(l.sacado || []).length ? `<div style="font-size:12px;margin-top:3px;color:var(--green)">Sacado: ${l.sacado.map(x => fmt(x.cant, 0) + ' de ' + (x.de === 'estante' ? 'estantería' : x.de.replace(/^CAJON SOBRE STOCK\s*/i, 'Cajón '))).join(' · ')}</div>` : ''}
-            ${!completo && s > 0 ? `<div style="font-size:12px;color:var(--amber)">Faltan ${fmt(l.cant - s, 0)}</div>` : ''}</div></div></div>`;
-    }).join('')}</div>`);
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Tildá todo lo que vas sacando: <b>no se guarda nada hasta que toques “💾 Guardar cambios”</b> abajo. Si está también en el sobre stock, te pregunta de dónde salió.</div>
+    <div class="grid" style="gap:8px">${items.map(({ l, i, f }) => tarjetaRenglon(p, l, i, f, armado)).join('')}</div>
+    ${barraGuardar(p)}`);
+}
+// Redibuja solo la tarjeta tocada y la barra (rápido en el teléfono)
+function refrescarRenglon(i) {
+  const p = borrPed; const l = p.items[i];
+  const el = document.getElementById('ren_' + i); if (el) el.outerHTML = tarjetaRenglon(p, l, i, fuentesDe(l.cod), false);
+  const b = document.getElementById('barraPed'); if (b) b.outerHTML = barraGuardar(p);
+  const r = document.getElementById('resPed'); if (r) r.innerHTML = `${fechaAR(p.fecha)} · ${resumenPed(p)} · <span class="tag ${EST_PEDIDO[estadoAuto(p)][1]}">${EST_PEDIDO[estadoAuto(p)][0]}</span>`;
 }
 function editarPedido(id) {
+  if (!salirDelPedido()) return;
   const p = S.pedidos.find(x => x.id === id); if (!p || p.estado === 'armado') return;
   Object.assign(pedido, { cliente: p.cliente, codigos: p.items.map(l => l.cod).join('\n'), cantidades: p.items.map(l => l.cant).join('\n'), editandoId: p.id });
   pedTab = 'nuevo'; armarPedido();
@@ -236,13 +271,12 @@ async function guardarDocPedido(p, detalle) {
   guardar('pedidos'); marcarPedidos();
   return r;
 }
-// Tildar: si está en cajones, preguntar de dónde se sacó. Destildar: se devuelve solo lo que salió de cajones.
+// Tildar (local): si está en cajones, preguntar de dónde se sacó. Destildar: lo de cajones vuelve al guardar.
 function tildarRenglon(id, i) {
-  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
+  const p = abrirBorrador(id); const l = p.items[i];
   if (sacadoDe(l) > 0) return formDestildar(id, i);
   const f = fuentesDe(l.cod); const falta = l.cant - sacadoDe(l);
   if (!f.cajones.length) return confirmarSacado(id, i, [{ de: 'estante', cant: falta }]);
-  // propuesta: primero estantería, después cajones en orden
   let resto = falta; const prop = [];
   const e = Math.min(resto, f.estante || 0); prop.push(['estante', e]); resto -= e;
   f.cajones.forEach(x => { const c = Math.min(resto, x.cant); prop.push([x.cajon, c]); resto -= c; });
@@ -263,49 +297,67 @@ function sumaSacado(falta) {
 function confirmarSacadoModal(id, i) {
   const partes = [...document.querySelectorAll('[id^="sac_"]')].map(e => ({ de: e.dataset.de, cant: parseInt(e.value) || 0 })).filter(x => x.cant > 0);
   if (!partes.length) { aviso('Poné cuántas sacaste', 'err'); return; }
-  for (const x of partes) if (x.de !== 'estante') { const c = S.sobre.find(y => y.cajon === x.de && y.cod === S.pedidos.find(p => p.id === id).items[i].cod); if (!c || x.cant > c.cant) { aviso(`En ${x.de} no hay tantas`, 'err'); return; } }
+  const f = fuentesDe(borrPed.items[i].cod);
+  for (const x of partes) if (x.de !== 'estante') { const c = f.cajones.find(y => y.cajon === x.de); if (!c || x.cant > c.cant) { aviso(`En ${x.de} no hay tantas`, 'err'); return; } }
   cerrarModal(); confirmarSacado(id, i, partes);
 }
-async function confirmarSacado(id, i, partes) {
-  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
-  const nota = `Pedido ${numPed(p)} · ${p.cliente}`;
-  const hechas = [];
-  for (const x of partes) {
-    if (x.de !== 'estante') {
-      const c = S.sobre.find(y => y.cajon === x.de && y.cod === l.cod); if (!c) continue;
-      const ok = x.cant >= c.cant ? await remoto({ tipo: 'eliminarItem', cajon: c.cajon, codigo: c.cod, nota: nota + ` (${x.cant} u.)` }, 'Descontando del cajón…')
-        : await remoto({ tipo: 'editarItem', cajon: c.cajon, codigo: c.cod, cantidad: c.cant - x.cant, ubicacion: c.ubic, nota }, 'Descontando del cajón…');
-      if (!ok) break;
-    }
-    hechas.push({ de: x.de, cant: x.cant, ts: Date.now(), stockV: S.metas.stock });
-  }
-  if (!hechas.length) return;
-  l.sacado = (l.sacado || []).concat(hechas);
-  await guardarDocPedido(p, `${l.cod}: sacado ${hechas.map(x => x.cant + ' de ' + (x.de === 'estante' ? 'estantería' : x.de)).join(', ')}`);
-  indexarSobre(); pintar();
+function confirmarSacado(id, i, partes) {
+  const p = abrirBorrador(id); const l = p.items[i];
+  partes.forEach(x => {
+    l.sacado = (l.sacado || []).concat([{ de: x.de, cant: x.cant, ts: Date.now(), stockV: S.metas.stock, nuevo: true }]);
+    if (x.de !== 'estante') { const k = x.de + '|' + l.cod; p.delta[k] = (p.delta[k] || 0) + x.cant; }
+  });
+  p.cambios++; refrescarRenglon(i);
 }
 function formDestildar(id, i) {
-  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
+  const p = abrirBorrador(id); const l = p.items[i];
   const deCajon = (l.sacado || []).filter(x => x.de !== 'estante');
   abrirModal(`<h3 style="margin-top:0">¿Destildar ${esc(l.cod)}?</h3>
     <p class="muted" style="margin-top:0">Se borra lo anotado como sacado (${l.sacado.map(x => fmt(x.cant, 0) + ' de ' + (x.de === 'estante' ? 'estantería' : esc(x.de))).join(', ')}).
-    ${deCajon.length ? '<br><b>Lo que salió de cajones vuelve al cajón</b> (' + deCajon.map(x => fmt(x.cant, 0) + ' u. a ' + esc(x.de)).join(', ') + ').' : ''}</p>
+    ${deCajon.length ? '<br>Lo que salió de cajones vuelve al cajón cuando guardes.' : ''}</p>
     <div class="fila" style="justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn rojo" onclick="cerrarModal();destildar('${id}',${i})">Destildar</button></div>`);
 }
-async function destildar(id, i) {
-  const p = S.pedidos.find(x => x.id === id); const l = p.items[i];
-  const nota = `Pedido ${numPed(p)} · ${p.cliente} · se destildó`;
-  const porCajon = {};
-  (l.sacado || []).filter(x => x.de !== 'estante').forEach(x => { porCajon[x.de] = (porCajon[x.de] || 0) + x.cant; });
-  for (const caj of Object.keys(porCajon)) {
-    const a = infoArticulo(l.cod);
-    if (!await agregarOSumarEnCajon(caj, l.cod, porCajon[caj], a.ubic && a.ubic !== '-' ? a.ubic : '-', nota, 'Devolviendo al cajón…')) { pintar(); return; }
+function destildar(id, i) {
+  const p = abrirBorrador(id); const l = p.items[i];
+  (l.sacado || []).filter(x => x.de !== 'estante').forEach(x => { const k = x.de + '|' + l.cod; p.delta[k] = (p.delta[k] || 0) - x.cant; });
+  l.sacado = []; p.cambios++; refrescarRenglon(i);
+}
+function descartarBorrador() {
+  if (!confirm('¿Descartar todos los cambios sin guardar de este pedido?')) return;
+  borrPed = null; pintar();
+}
+// Guardar: primero los cajones (lo neto por cajón y código), después el pedido una sola vez
+async function guardarCambiosPedido() {
+  const p = borrPed; if (!p || !p.cambios) return;
+  const nota = `Pedido ${numPed(p)} · ${p.cliente}`;
+  const claves = Object.keys(p.delta).filter(k => p.delta[k]);
+  let hechos = 0, error = null;
+  for (const k of claves) {
+    const [caj, cod] = k.split('|'); const n = p.delta[k];
+    const c = S.sobre.find(y => y.cajon === caj && y.cod === cod);
+    let ok;
+    if (n > 0) {
+      if (!c) { error = `${cod} ya no está en ${caj}`; continue; }
+      ok = n >= c.cant ? await remoto({ tipo: 'eliminarItem', cajon: caj, codigo: cod, nota: nota + ` (${n} u.)` }, `Guardando ${hechos + 1} de ${claves.length}…`)
+        : await remoto({ tipo: 'editarItem', cajon: caj, codigo: cod, cantidad: c.cant - n, ubicacion: c.ubic, nota }, `Guardando ${hechos + 1} de ${claves.length}…`);
+    } else {
+      const a = infoArticulo(cod);
+      ok = await agregarOSumarEnCajon(caj, cod, -n, a.ubic && a.ubic !== '-' ? a.ubic : '-', nota + ' · se destildó', `Guardando ${hechos + 1} de ${claves.length}…`);
+    }
+    if (!ok) { error = 'no se pudo guardar en ' + caj; break; }
+    delete p.delta[k]; hechos++;
   }
-  l.sacado = [];
-  await guardarDocPedido(p, `${l.cod}: destildado` + (Object.keys(porCajon).length ? ' (devuelto a ' + Object.keys(porCajon).join(', ') + ')' : ''));
-  indexarSobre(); pintar();
+  if (error && Object.keys(p.delta).some(k => p.delta[k])) { aviso('❌ Se cortó al guardar (' + error + '). Lo que quedó sin guardar sigue marcado: tocá Guardar de nuevo.', 'err'); indexarSobre(); pintar(); return; }
+  const doc = JSON.parse(JSON.stringify(p)); delete doc.delta; delete doc.cambios;
+  doc.items.forEach(l => (l.sacado || []).forEach(x => { delete x.nuevo; }));
+  const tot = p.cambios;
+  if (!await guardarDocPedido(doc, `armado: ${tot} cambios guardados`)) { aviso('❌ No se pudo guardar el pedido. Los cajones ya se descontaron; tocá Guardar de nuevo.', 'err'); p.delta = {}; pintar(); return; }
+  const i = S.pedidos.findIndex(x => x.id === doc.id); if (i >= 0) S.pedidos[i] = doc;
+  guardar('pedidos'); marcarPedidos(); borrPed = null; indexarSobre(); pintar();
+  aviso(`Pedido ${numPed(doc)}: ${tot} cambios guardados`, 'ok');
 }
 async function terminarPedido(id) {
+  if (hayCambiosPed()) { await guardarCambiosPedido(); if (hayCambiosPed()) return; }
   const p = S.pedidos.find(x => x.id === id);
   const faltan = p.items.filter(l => sacadoDe(l) < l.cant);
   if (faltan.length && !confirm(`Quedan ${faltan.length} renglones sin completar (${faltan.slice(0, 5).map(l => l.cod).join(', ')}${faltan.length > 5 ? '…' : ''}). ¿Marcar el pedido como armado igual?`)) return;
@@ -321,6 +373,7 @@ async function eliminarPedido(id) {
   const p = S.pedidos.find(x => x.id === id);
   if (!confirm(`¿Eliminar el Pedido ${numPed(p)} de ${p.cliente}? Lo que ya se sacó de los cajones no vuelve.`)) return;
   if (!await docBorrar('pedidos', id, { tipo: 'Pedido', detalle: `${numPed(p)} eliminado (${p.cliente})` })) return;
+  if (borrPed && borrPed.id === id) borrPed = null;
   S.pedidos = S.pedidos.filter(x => x.id !== id); guardar('pedidos'); marcarPedidos(); pedTab = 'lista'; pintar();
 }
 function pdfPedidoGuardado(id) {

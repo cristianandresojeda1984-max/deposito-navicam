@@ -119,6 +119,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarModa
 let vista = 'inicio';
 const VISTAS = {};
 function ir(v, opciones) {
+  if (vista === 'pedido' && v !== 'pedido' && typeof salirDelPedido === 'function' && !salirDelPedido()) return;
   vista = v;
   document.querySelectorAll('.nav').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   document.getElementById('side').classList.remove('abierto');
