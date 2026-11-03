@@ -205,7 +205,7 @@ tr.fila-marcada td{background:rgba(245,180,40,.18)!important;transition:backgrou
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-11-03 15:22</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-11-03 15:28</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -2290,23 +2290,35 @@ function abrirEnCotizador(id) {
 function duplicar(id) {
   const p = S.presupuestos.find(x => x.id === id);
   abrirModal(`<h3 style="margin-top:0">Copiar el presupuesto ${numPresu(p)}</h3>
-    <p class="muted">${p.items.length} artículos de ${esc(p.clienteNombre)} · ${fechaAR(p.fecha)}. Se arma un presupuesto nuevo con los precios y el dólar de hoy.</p>
+    <p class="muted">${p.items.length} artículos de ${esc(p.clienteNombre)} · ${fechaAR(p.fecha)} · total original ${plata(montoPresu(p))} + IVA.</p>
     <div class="campo"><span class="lbl">¿Para qué cliente?</span><select class="in" id="dupCli">${opcionesClientes(p.clienteId)}</select></div>
     <div class="muted" style="font-size:12px;margin-top:6px">Si elegís otro cliente, los descuentos se recalculan con su escala.</div>
-    <div class="fila" style="margin-top:14px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="copiarPresu('${p.id}',document.getElementById('dupCli').value)">Copiar al cotizador</button></div>`);
+    <div class="campo" style="margin-top:10px"><span class="lbl">Precios</span>
+      <label class="fila" style="gap:6px;cursor:pointer;padding:4px 0"><input type="radio" name="dupPrec" value="hoy" checked> <span><b>Actualizar a los precios de hoy</b> <span class="muted" style="font-size:12px">(lista actual y dólar $ ${fmt(S.dolar)})</span></span></label>
+      <label class="fila" style="gap:6px;cursor:pointer;padding:4px 0"><input type="radio" name="dupPrec" value="original"> <span><b>Conservar los precios del presupuesto original</b> <span class="muted" style="font-size:12px">${p ? '(dólar $ ' + fmt(p.dolar) + ' del ' + fechaAR(p.fecha) + ')' : '(los de cada presupuesto)'}</span></span></label></div>
+    <div class="fila" style="margin-top:14px;justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn pri" onclick="copiarPresu('${p.id}',document.getElementById('dupCli').value,document.querySelector('input[name=dupPrec]:checked').value)">Copiar al cotizador</button></div>`);
 }
 function opcionesClientes(sel) {
   return CATEGORIAS.map(c => `<optgroup label="${esc(c.largo)}">${S.clientes.filter(x => x.categoria === c.id).sort((a, x) => a.nombre.localeCompare(x.nombre)).map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</optgroup>`).join('');
 }
-function copiarPresu(id, clienteId) {
+function copiarPresu(id, clienteId, precios) {
   const p = S.presupuestos.find(x => x.id === id);
   if (!puedePisarBorrador()) return;
   const otro = clienteId && clienteId !== p.clienteId;
-  S.borrador = { editandoId: null, clienteId: clienteId || p.clienteId, validezDias: p.validezDias, fecha: hoyISO(), dolar: S.dolar,
+  armarCopia(p, clienteId || p.clienteId, precios);
+  guardar('borrador'); cerrarModal(); ir('cotizador');
+  aviso(`Copia del presupuesto ${numPresu(p)} lista en el cotizador${otro ? ' para ' + (cliente(clienteId) || {}).nombre : ''}, ${precios === 'original' ? 'con los precios del original (dólar $ ' + fmt(p.dolar) + ')' : 'con precios de hoy'}`, 'ok');
+}
+// Arma el borrador desde un presupuesto: con precios de hoy (lista y dólar actuales) o conservando los del original
+function armarCopia(p, clienteId, precios) {
+  const otro = clienteId !== p.clienteId;
+  const original = precios === 'original';
+  S.borrador = { editandoId: null, clienteId, validezDias: p.validezDias, fecha: hoyISO(), dolar: original ? (Number(p.dolar) || S.dolar) : S.dolar,
     items: p.items.map(l => { const c = { ...l }; delete c.vendido; delete c.motivo; if (c.dispo && !c.dispo.manual) delete c.dispo; if (otro && c.manual) c.manual = false; return c; }),
     notas: p.notas || '', mostrarDispo: !!(p.opciones && p.opciones.mostrarDispo) };
-  recalcularBorrador(true); guardar('borrador'); cerrarModal(); ir('cotizador');
-  aviso(`Copia del presupuesto ${numPresu(p)} lista en el cotizador${otro ? ' para ' + (cliente(clienteId) || {}).nombre : ''}, con precios de hoy`, 'ok');
+  // original: mismo dólar, mismos USD y descuentos; solo se recalcula el descuento si cambia el cliente
+  if (!original) recalcularBorrador(true);
+  else { const cli = cliente(clienteId); S.borrador.items.forEach(l => { if (otro) recalcDesc(l, cli); calcularLinea(l, S.borrador.dolar); }); }
 }
 // Desde el cotizador: buscar un presupuesto anterior y traer sus artículos
 let qCopiar = '';
@@ -2314,7 +2326,10 @@ function formCopiarAnterior() {
   abrirModal(`<h3 style="margin-top:0">Copiar de un presupuesto anterior</h3>
     <input class="in" id="qCopiar" autofocus placeholder="Buscar por n.º, cliente o código…" value="${esc(qCopiar)}" oninput="qCopiar=this.value;listaCopiar()">
     <div id="listaCopiar" style="max-height:420px;overflow:auto;margin-top:10px"></div>
-    <div class="muted" style="font-size:12px;margin-top:8px">Los artículos se traen con los precios y el dólar de hoy, para el cliente que esté elegido en el cotizador.</div>`, true);
+    <div class="campo" style="margin-top:10px"><span class="lbl">Precios</span>
+      <label class="fila" style="gap:6px;cursor:pointer;padding:4px 0"><input type="radio" name="copPrec" value="hoy" checked> <span><b>Actualizar a los precios de hoy</b> <span class="muted" style="font-size:12px">(lista actual y dólar $ ${fmt(S.dolar)})</span></span></label>
+      <label class="fila" style="gap:6px;cursor:pointer;padding:4px 0"><input type="radio" name="copPrec" value="original"> <span><b>Conservar los precios del presupuesto original</b> <span class="muted" style="font-size:12px">${null ? '(dólar $ ' + fmt(null.dolar) + ' del ' + fechaAR(null.fecha) + ')' : '(los de cada presupuesto)'}</span></span></label></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">Se traen para el cliente que esté elegido en el cotizador.</div>`, true);
   listaCopiar();
 }
 function listaCopiar() {
@@ -2329,17 +2344,14 @@ function traerAnterior(id) {
   if (b.items.length && !confirm(`El cotizador ya tiene ${b.items.length} artículos. ¿Reemplazarlos por los ${p.items.length} del presupuesto ${numPresu(p)}?`)) return;
   const clienteId = b.clienteId || p.clienteId;
   const ed = b.editandoId; const fecha = b.fecha;
-  S.borrador = null; copiarPresuSinPreguntar(p, clienteId);
+  const prec = (document.querySelector('input[name=copPrec]:checked') || {}).value || 'hoy';
+  S.borrador = null; copiarPresuSinPreguntar(p, clienteId, prec);
   if (ed) { S.borrador.editandoId = ed; S.borrador.fecha = fecha; }
   guardar('borrador'); cerrarModal(); pintar();
 }
-function copiarPresuSinPreguntar(p, clienteId) {
-  const otro = clienteId !== p.clienteId;
-  S.borrador = { editandoId: null, clienteId, validezDias: p.validezDias, fecha: hoyISO(), dolar: S.dolar,
-    items: p.items.map(l => { const c = { ...l }; delete c.vendido; delete c.motivo; if (c.dispo && !c.dispo.manual) delete c.dispo; if (otro && c.manual) c.manual = false; return c; }),
-    notas: p.notas || '', mostrarDispo: !!(p.opciones && p.opciones.mostrarDispo) };
-  recalcularBorrador(true);
-  aviso(`Artículos del presupuesto ${numPresu(p)} cargados con precios de hoy`, 'ok');
+function copiarPresuSinPreguntar(p, clienteId, precios) {
+  armarCopia(p, clienteId, precios);
+  aviso(`Artículos del presupuesto ${numPresu(p)} cargados ${precios === 'original' ? 'con los precios del original (dólar $ ' + fmt(p.dolar) + ')' : 'con precios de hoy'}`, 'ok');
 }
 function recalcularBorrador(conLista) {
   const b = S.borrador; const cli = cliente(b.clienteId);
@@ -3252,7 +3264,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-11-03 15:22';
+const VERSION_APP = '2026-11-03 15:28';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));
