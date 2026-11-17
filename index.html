@@ -207,7 +207,7 @@ tr.fila-marcada td{background:rgba(245,180,40,.18)!important;transition:backgrou
     <div class="side-pie">
       <div class="dolar" onclick="editarDolar()" title="Cambiar dólar"><div><small>Dólar</small><b id="dolarTxt">—</b></div><span class="muted">✎</span></div>
       <div class="prueba" id="estadoSync">Conectando…</div>
-      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-11-17 10:46</span></div>
+      <div class="prueba" style="opacity:.6">Versión <span id="verApp">2026-11-17 10:47</span></div>
     </div>
   </aside>
   <main id="main"></main>
@@ -2569,8 +2569,8 @@ VISTAS.metricas = function () {
       <div style="height:7px;background:var(--panel2);border-radius:4px;margin-top:4px"><div style="height:7px;border-radius:4px;background:var(--red);width:${v.monto / maxMot * 100}%"></div></div></div>`).join('') : '<div class="muted">Todavía no hay ítems no vendidos en este período.</div>'}</div>
   </div>
   <div class="grid g3" style="margin-top:14px">
-    <div class="panel"><div class="fila" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Clientes que más compran <span class="muted" style="font-size:12px;font-weight:400">· ${cliOrden.length} clientes</span></h3>${cliOrden.length ? '<button class="btn chico" onclick="excelRanking(\'cli\')">⬇ Excel</button>' : ''}</div>${cliOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Cliente</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${cliOrden.map(c => `<tr><td>${esc(c.nombre)}<div class="muted" style="font-size:11px">${c.n} presup. · ${plata0(c.pres)}</div></td><td class="der num">${plata0(c.vend)}</td><td class="der">${pct(c.presCerr ? c.vend / c.presCerr : null)}</td></tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
-    <div class="panel"><div class="fila" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Artículos más cotizados <span class="muted" style="font-size:12px;font-weight:400">· ${artOrden.length} artículos</span></h3>${artOrden.length ? '<button class="btn chico" onclick="excelRanking(\'art\')">⬇ Excel</button>' : ''}</div>${artOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Código</th><th class="der">Veces</th><th class="der">Unid. cotiz.</th><th class="der">Vendidas</th></tr>${artOrden.map(([c, a]) => `<tr><td><span class="num" style="color:var(--amber)">${esc(c)}</span><div class="muted" style="font-size:11px">${esc(a.desc)}</div></td><td class="der">${a.veces}</td><td class="der">${a.cot}</td><td class="der">${a.vend}</td></tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
+    <div class="panel"><div class="fila" style="justify-content:space-between;margin-bottom:8px"><div><h3 style="margin:0">Clientes que más compran</h3><div class="muted" style="font-size:12px">${cliOrden.length} clientes</div></div>${cliOrden.length ? '<button class="btn chico" onclick="excelRanking(\'cli\')">⬇ Excel</button>' : ''}</div>${cliOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Cliente</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${cliOrden.map(c => `<tr><td>${esc(c.nombre)}<div class="muted" style="font-size:11px">${c.n} presup. · ${plata0(c.pres)}</div></td><td class="der num">${plata0(c.vend)}</td><td class="der">${pct(c.presCerr ? c.vend / c.presCerr : null)}</td></tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
+    <div class="panel"><div class="fila" style="justify-content:space-between;margin-bottom:8px"><div><h3 style="margin:0">Artículos más cotizados</h3><div class="muted" style="font-size:12px">${artOrden.length} artículos</div></div>${artOrden.length ? '<button class="btn chico" onclick="excelRanking(\'art\')">⬇ Excel</button>' : ''}</div>${artOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Código</th><th class="der" title="Veces cotizado">Veces</th><th class="der" title="Unidades cotizadas">Cotiz.</th><th class="der" title="Unidades vendidas">Vend.</th><th class="der" title="Stock actual">Stock</th></tr>${artOrden.map(([c, a]) => `<tr><td><span class="num" style="color:var(--amber)">${esc(c)}</span><div class="muted" style="font-size:11px">${esc(a.desc)}</div></td><td class="der">${a.veces}</td><td class="der">${a.cot}</td><td class="der">${a.vend}</td>${celdaStockMet(c)}</tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
     <div class="panel tabla-scroll"><h3>Por categoría de cliente</h3><table class="t"><tr><th>Categoría</th><th class="der">Presup.</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${porCat.map(x => `<tr><td>${x.c.corto}<div class="muted" style="font-size:11px">${x.n} presupuestos</div></td><td class="der num">${plata0(x.pres)}</td><td class="der num">${plata0(x.vend)}</td><td class="der">${pct(x.cierre)}</td></tr>`).join('')}</table></div>
   </div>`);
 };
@@ -2588,13 +2588,20 @@ function graficoMeses(base) {
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${barras}<line x1="0" x2="${W}" y1="${H - 22}" y2="${H - 22}" stroke="#25324d"/></svg>
     <div class="fila" style="font-size:12px"><span class="tag" style="background:#4cb3f0;color:#062033">Presupuestado</span><span class="tag" style="background:#34c77b;color:#062014">Vendido</span><span class="muted">Pasá el mouse por las barras para ver los montos.</span></div>`;
 }
+// Stock actual del artículo (en rojo si no hay, en naranja si hay menos de lo que se suele cotizar)
+function celdaStockMet(cod) {
+  const st = numStock(infoArticulo(cod).stock);
+  const a = _metListas.art.find(x => x[0] === cod); const prom = a ? a[1].cot / Math.max(1, a[1].veces) : 0;
+  const col = st === null ? 'var(--muted)' : st <= 0 ? 'var(--red)' : st < prom ? 'var(--amber)' : '';
+  return `<td class="der num" style="${col ? 'color:' + col + ';' : ''}font-weight:600" title="${st === null ? 'Sin dato de stock' : st <= 0 ? 'Sin stock' : st < prom ? 'Hay menos de lo que se cotiza en promedio (' + fmt(prom, 0) + ' u.)' : ''}">${st === null ? '—' : fmt(st, 0)}</td>`;
+}
 // Listas completas de la pantalla (con los filtros elegidos), para exportar
 let _metListas = { cli: [], art: [] };
 function filasRanking(tipo) {
   if (tipo === 'cli') return [['Cliente', 'Presupuestos', 'Presupuestado + IVA', 'Vendido + IVA', 'Cierre %']].concat(
     _metListas.cli.map(c => [c.nombre, c.n, c.pres, c.vend, c.presCerr ? Math.round(c.vend / c.presCerr * 1000) / 10 : '']));
-  return [['Código', 'Descripción', 'Veces cotizado', 'Unidades cotizadas', 'Unidades vendidas']].concat(
-    _metListas.art.map(([c, a]) => [valorCelda(c), a.desc, a.veces, a.cot, a.vend]));
+  return [['Código', 'Descripción', 'Veces cotizado', 'Unidades cotizadas', 'Unidades vendidas', 'Stock actual']].concat(
+    _metListas.art.map(([c, a]) => { const st = numStock(infoArticulo(c).stock); return [valorCelda(c), a.desc, a.veces, a.cot, a.vend, st === null ? 'sin dato' : st]; }));
 }
 function textoFiltrosMet() {
   const per = !mPeriodo || mPeriodo === 'todo' ? 'todo' : mPeriodo;
@@ -2602,7 +2609,7 @@ function textoFiltrosMet() {
 }
 function excelRanking(tipo) {
   const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(filasRanking(tipo));
-  ws['!cols'] = tipo === 'cli' ? [{ wch: 34 }, { wch: 13 }, { wch: 20 }, { wch: 18 }, { wch: 10 }] : [{ wch: 14 }, { wch: 44 }, { wch: 15 }, { wch: 18 }, { wch: 18 }];
+  ws['!cols'] = tipo === 'cli' ? [{ wch: 34 }, { wch: 13 }, { wch: 20 }, { wch: 18 }, { wch: 10 }] : [{ wch: 14 }, { wch: 44 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, ws, tipo === 'cli' ? 'Clientes' : 'Artículos');
   XLSX.writeFile(wb, ((tipo === 'cli' ? 'Clientes_que_mas_compran_' : 'Articulos_mas_cotizados_') + textoFiltrosMet()).replace(/[\\/:*?"<>|\s]+/g, '_') + '.xlsx');
 }
@@ -3287,7 +3294,7 @@ async function migrarNotasViejas() {
 }
 
 // ============ Instalable como app (PWA) y siempre actualizada ============
-const VERSION_APP = '2026-11-17 10:46';
+const VERSION_APP = '2026-11-17 10:47';
 const SEGURO = location.protocol === 'https:' || location.hostname === 'localhost';
 if ('serviceWorker' in navigator && SEGURO) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('No se pudo registrar el service worker', e));
