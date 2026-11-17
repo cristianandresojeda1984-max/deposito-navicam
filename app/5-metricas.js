@@ -23,11 +23,12 @@ VISTAS.metricas = function () {
   // clientes
   const porCli = {};
   ps.forEach(p => { const c = porCli[p.clienteId] = porCli[p.clienteId] || { nombre: p.clienteNombre, pres: 0, vend: 0, presCerr: 0, n: 0 }; c.n++; c.pres += montoPresu(p); if (p.estado === 'cerrado') { c.vend += montoVendido(p); c.presCerr += montoPresu(p); } });
-  const cliOrden = Object.values(porCli).sort((a, b) => b.vend - a.vend || b.pres - a.pres).slice(0, 10);
+  const cliOrden = Object.values(porCli).sort((a, b) => b.vend - a.vend || b.pres - a.pres);
   // artículos
   const porArt = {};
   ps.forEach(p => p.items.forEach(l => { const a = porArt[l.cod] = porArt[l.cod] || { desc: l.desc, cot: 0, vend: 0, veces: 0 }; a.veces++; a.cot += l.cant; if (p.estado === 'cerrado') a.vend += l.vendido || 0; }));
   const artOrden = Object.entries(porArt).sort((a, b) => b[1].veces - a[1].veces || b[1].cot - a[1].cot);
+  _metListas = { cli: cliOrden, art: artOrden };
   // categorías
   const porCat = CATEGORIAS.map(c => { const l = ps.filter(p => p.categoria === c.id); const cer = l.filter(p => p.estado === 'cerrado'); const v = cer.reduce((a, p) => a + montoVendido(p), 0); const pc = cer.reduce((a, p) => a + montoPresu(p), 0); return { c, n: l.length, pres: l.reduce((a, p) => a + montoPresu(p), 0), vend: v, cierre: pc ? v / pc : null }; });
   const pct = x => x === null || isNaN(x) ? '—' : fmt(x * 100, 0) + ' %';
@@ -50,8 +51,8 @@ VISTAS.metricas = function () {
       <div style="height:7px;background:var(--panel2);border-radius:4px;margin-top:4px"><div style="height:7px;border-radius:4px;background:var(--red);width:${v.monto / maxMot * 100}%"></div></div></div>`).join('') : '<div class="muted">Todavía no hay ítems no vendidos en este período.</div>'}</div>
   </div>
   <div class="grid g3" style="margin-top:14px">
-    <div class="panel tabla-scroll"><h3>Clientes que más compran</h3>${cliOrden.length ? `<table class="t"><tr><th>Cliente</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${cliOrden.map(c => `<tr><td>${esc(c.nombre)}<div class="muted" style="font-size:11px">${c.n} presup. · ${plata0(c.pres)}</div></td><td class="der num">${plata0(c.vend)}</td><td class="der">${pct(c.presCerr ? c.vend / c.presCerr : null)}</td></tr>`).join('')}</table>` : '<div class="muted">Sin datos.</div>'}</div>
-    <div class="panel"><h3>Artículos más cotizados <span class="muted" style="font-size:12px;font-weight:400">· ${artOrden.length} artículos</span></h3>${artOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Código</th><th class="der">Veces</th><th class="der">Unid. cotiz.</th><th class="der">Vendidas</th></tr>${artOrden.map(([c, a]) => `<tr><td><span class="num" style="color:var(--amber)">${esc(c)}</span><div class="muted" style="font-size:11px">${esc(a.desc)}</div></td><td class="der">${a.veces}</td><td class="der">${a.cot}</td><td class="der">${a.vend}</td></tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
+    <div class="panel"><div class="fila" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Clientes que más compran <span class="muted" style="font-size:12px;font-weight:400">· ${cliOrden.length} clientes</span></h3>${cliOrden.length ? '<button class="btn chico" onclick="excelRanking(\'cli\')">⬇ Excel</button>' : ''}</div>${cliOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Cliente</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${cliOrden.map(c => `<tr><td>${esc(c.nombre)}<div class="muted" style="font-size:11px">${c.n} presup. · ${plata0(c.pres)}</div></td><td class="der num">${plata0(c.vend)}</td><td class="der">${pct(c.presCerr ? c.vend / c.presCerr : null)}</td></tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
+    <div class="panel"><div class="fila" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Artículos más cotizados <span class="muted" style="font-size:12px;font-weight:400">· ${artOrden.length} artículos</span></h3>${artOrden.length ? '<button class="btn chico" onclick="excelRanking(\'art\')">⬇ Excel</button>' : ''}</div>${artOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Código</th><th class="der">Veces</th><th class="der">Unid. cotiz.</th><th class="der">Vendidas</th></tr>${artOrden.map(([c, a]) => `<tr><td><span class="num" style="color:var(--amber)">${esc(c)}</span><div class="muted" style="font-size:11px">${esc(a.desc)}</div></td><td class="der">${a.veces}</td><td class="der">${a.cot}</td><td class="der">${a.vend}</td></tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
     <div class="panel tabla-scroll"><h3>Por categoría de cliente</h3><table class="t"><tr><th>Categoría</th><th class="der">Presup.</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${porCat.map(x => `<tr><td>${x.c.corto}<div class="muted" style="font-size:11px">${x.n} presupuestos</div></td><td class="der num">${plata0(x.pres)}</td><td class="der num">${plata0(x.vend)}</td><td class="der">${pct(x.cierre)}</td></tr>`).join('')}</table></div>
   </div>`);
 };
@@ -69,6 +70,24 @@ function graficoMeses(base) {
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${barras}<line x1="0" x2="${W}" y1="${H - 22}" y2="${H - 22}" stroke="#25324d"/></svg>
     <div class="fila" style="font-size:12px"><span class="tag" style="background:#4cb3f0;color:#062033">Presupuestado</span><span class="tag" style="background:#34c77b;color:#062014">Vendido</span><span class="muted">Pasá el mouse por las barras para ver los montos.</span></div>`;
 }
+// Listas completas de la pantalla (con los filtros elegidos), para exportar
+let _metListas = { cli: [], art: [] };
+function filasRanking(tipo) {
+  if (tipo === 'cli') return [['Cliente', 'Presupuestos', 'Presupuestado + IVA', 'Vendido + IVA', 'Cierre %']].concat(
+    _metListas.cli.map(c => [c.nombre, c.n, c.pres, c.vend, c.presCerr ? Math.round(c.vend / c.presCerr * 1000) / 10 : '']));
+  return [['Código', 'Descripción', 'Veces cotizado', 'Unidades cotizadas', 'Unidades vendidas']].concat(
+    _metListas.art.map(([c, a]) => [valorCelda(c), a.desc, a.veces, a.cot, a.vend]));
+}
+function textoFiltrosMet() {
+  const per = !mPeriodo || mPeriodo === 'todo' ? 'todo' : mPeriodo;
+  return per + (mCat && mCat !== 'todas' ? '_' + catCorto(mCat) : '') + (mCli && mCli !== 'todos' ? '_' + ((cliente(mCli) || {}).nombre || '') : '');
+}
+function excelRanking(tipo) {
+  const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(filasRanking(tipo));
+  ws['!cols'] = tipo === 'cli' ? [{ wch: 34 }, { wch: 13 }, { wch: 20 }, { wch: 18 }, { wch: 10 }] : [{ wch: 14 }, { wch: 44 }, { wch: 15 }, { wch: 18 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, ws, tipo === 'cli' ? 'Clientes' : 'Artículos');
+  XLSX.writeFile(wb, ((tipo === 'cli' ? 'Clientes_que_mas_compran_' : 'Articulos_mas_cotizados_') + textoFiltrosMet()).replace(/[\\/:*?"<>|\s]+/g, '_') + '.xlsx');
+}
 function exportarMetricas() {
   const wb = XLSX.utils.book_new();
   const p1 = [['N.º', 'Fecha', 'Cliente', 'Categoría', 'Válido hasta', 'Dólar (interno)', 'Ítems', 'Total + IVA', 'Estado', 'Vendido + IVA', 'Fecha cierre', 'Motivos']];
@@ -77,6 +96,8 @@ function exportarMetricas() {
   S.presupuestos.forEach(p => p.items.forEach(l => p2.push([numPresu(p), p.clienteNombre, valorCelda(l.cod), l.desc, l.D, l.cant, l.listaArs, l.descPct, l.unit, l.sub, p.estado === 'cerrado' ? (l.vendido || 0) : '', l.motivo || ''])));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(p1), 'Presupuestos');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(p2), 'Ítems');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasRanking('cli')), 'Clientes que más compran');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasRanking('art')), 'Artículos más cotizados');
   XLSX.writeFile(wb, 'Metricas_presupuestos_' + hoyISO() + '.xlsx');
 }
 
