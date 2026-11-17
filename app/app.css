@@ -160,3 +160,5 @@ tr.fila-marcada td{background:rgba(245,180,40,.18)!important;transition:backgrou
 .celda{width:100%;box-sizing:border-box;background:transparent;border:1px solid transparent;color:var(--txt);padding:7px 8px;font-size:14px;outline:none}
 .celda:focus{border-color:var(--amber);background:#0f1729}
 .celda.der{text-align:right}
+
+.tabla-fija th{position:sticky;top:0;background:var(--panel);z-index:1}

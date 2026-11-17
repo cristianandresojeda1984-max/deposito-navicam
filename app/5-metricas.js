@@ -27,7 +27,7 @@ VISTAS.metricas = function () {
   // artículos
   const porArt = {};
   ps.forEach(p => p.items.forEach(l => { const a = porArt[l.cod] = porArt[l.cod] || { desc: l.desc, cot: 0, vend: 0, veces: 0 }; a.veces++; a.cot += l.cant; if (p.estado === 'cerrado') a.vend += l.vendido || 0; }));
-  const artOrden = Object.entries(porArt).sort((a, b) => b[1].veces - a[1].veces || b[1].cot - a[1].cot).slice(0, 10);
+  const artOrden = Object.entries(porArt).sort((a, b) => b[1].veces - a[1].veces || b[1].cot - a[1].cot);
   // categorías
   const porCat = CATEGORIAS.map(c => { const l = ps.filter(p => p.categoria === c.id); const cer = l.filter(p => p.estado === 'cerrado'); const v = cer.reduce((a, p) => a + montoVendido(p), 0); const pc = cer.reduce((a, p) => a + montoPresu(p), 0); return { c, n: l.length, pres: l.reduce((a, p) => a + montoPresu(p), 0), vend: v, cierre: pc ? v / pc : null }; });
   const pct = x => x === null || isNaN(x) ? '—' : fmt(x * 100, 0) + ' %';
@@ -51,7 +51,7 @@ VISTAS.metricas = function () {
   </div>
   <div class="grid g3" style="margin-top:14px">
     <div class="panel tabla-scroll"><h3>Clientes que más compran</h3>${cliOrden.length ? `<table class="t"><tr><th>Cliente</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${cliOrden.map(c => `<tr><td>${esc(c.nombre)}<div class="muted" style="font-size:11px">${c.n} presup. · ${plata0(c.pres)}</div></td><td class="der num">${plata0(c.vend)}</td><td class="der">${pct(c.presCerr ? c.vend / c.presCerr : null)}</td></tr>`).join('')}</table>` : '<div class="muted">Sin datos.</div>'}</div>
-    <div class="panel tabla-scroll"><h3>Artículos más cotizados</h3>${artOrden.length ? `<table class="t"><tr><th>Código</th><th class="der">Veces</th><th class="der">Unid. cotiz.</th><th class="der">Vendidas</th></tr>${artOrden.map(([c, a]) => `<tr><td><span class="num" style="color:var(--amber)">${esc(c)}</span><div class="muted" style="font-size:11px">${esc(a.desc)}</div></td><td class="der">${a.veces}</td><td class="der">${a.cot}</td><td class="der">${a.vend}</td></tr>`).join('')}</table>` : '<div class="muted">Sin datos.</div>'}</div>
+    <div class="panel"><h3>Artículos más cotizados <span class="muted" style="font-size:12px;font-weight:400">· ${artOrden.length} artículos</span></h3>${artOrden.length ? `<div class="lista-scroll" style="max-height:520px;overflow:auto"><table class="t tabla-fija"><tr><th>Código</th><th class="der">Veces</th><th class="der">Unid. cotiz.</th><th class="der">Vendidas</th></tr>${artOrden.map(([c, a]) => `<tr><td><span class="num" style="color:var(--amber)">${esc(c)}</span><div class="muted" style="font-size:11px">${esc(a.desc)}</div></td><td class="der">${a.veces}</td><td class="der">${a.cot}</td><td class="der">${a.vend}</td></tr>`).join('')}</table></div>` : '<div class="muted">Sin datos.</div>'}</div>
     <div class="panel tabla-scroll"><h3>Por categoría de cliente</h3><table class="t"><tr><th>Categoría</th><th class="der">Presup.</th><th class="der">Vendido</th><th class="der">Cierre</th></tr>${porCat.map(x => `<tr><td>${x.c.corto}<div class="muted" style="font-size:11px">${x.n} presupuestos</div></td><td class="der num">${plata0(x.pres)}</td><td class="der num">${plata0(x.vend)}</td><td class="der">${pct(x.cierre)}</td></tr>`).join('')}</table></div>
   </div>`);
 };
